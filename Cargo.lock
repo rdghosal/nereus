@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "perseus"
+name = "percy"
 version = "0.1.0"
