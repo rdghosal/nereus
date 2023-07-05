@@ -1,5 +1,30 @@
 use std::{env, fs, io, path::Path, process};
 
+struct PydanticModel {
+    name: String,
+    parent: String,
+    fields: Vec<(String, String)>,
+}
+
+fn lex(source: String) -> Vec<PydanticModel> {
+    let mut models = vec![];
+    let mut i = 0;
+    let lines = source.split("\n").collect::<Vec<_>>();
+    while i < lines.len() {
+        let line = lines[i].trim();
+        if line.starts_with("class") {
+            let class_name = line.split(' ').collect::<Vec<&str>>()[1];
+            let mut fields = vec![];
+            i += 1;
+
+            let curr_line = lines[i];
+            while !curr_line.starts_with("class") {}
+        }
+        i += 1;
+    }
+    models
+}
+
 fn read_files(dir: &Path, source: &mut String) -> Result<(), io::Error> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
