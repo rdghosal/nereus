@@ -1,24 +1,38 @@
 use std::{env, fs, io, path::Path, process};
 
-struct PydanticModel {
+struct PydanticModel<'a> {
     name: String,
     parent: String,
-    fields: Vec<(String, String)>,
+    fields: Vec<(&'a str, &'a str)>,
 }
 
-fn lex(source: String) -> Vec<PydanticModel> {
+const INDENT: &str = "     ";
+
+fn lex(source: String) -> Vec<PydanticModel<'static>> {
     let mut models = vec![];
     let mut i = 0;
     let lines = source.split("\n").collect::<Vec<_>>();
     while i < lines.len() {
-        let line = lines[i].trim();
+        // Cannot trim as whitespace is significant in Python
+        // let line = lines[i].trim();
+        let line = lines[i];
         if line.starts_with("class") {
+            // TODO: parse superclasses
+            // TODO: omit parens and trailing colon
             let class_name = line.split(' ').collect::<Vec<&str>>()[1];
-            let mut fields = vec![];
+            let mut fields: Vec<(&str, &str)> = vec![];
             i += 1;
 
-            let curr_line = lines[i];
-            while !curr_line.starts_with("class") {}
+            while !lines[i].starts_with("class")
+                || !lines[i].starts_with(&format!("{}class", INDENT))
+            {
+                let curr_line = &lines[i].trim();
+                if curr_line.contains(": ") {
+                    let field_and_type: Vec<&str> = curr_line.split(": ").collect();
+                    fields.push((field_and_type[0], field_and_type[1]));
+                    i += 1;
+                }
+            }
         }
         i += 1;
     }
