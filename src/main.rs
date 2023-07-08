@@ -1,8 +1,8 @@
-use std::{env, fs, io, path::Path, process};
+use std::{env, format, fs, io, path::Path, process};
 
 struct PydanticModel {
     name: String,
-    parent: String,
+    parents: Vec<String>,
     fields: Vec<(String, String)>,
 }
 
@@ -17,24 +17,46 @@ fn lex(source: String) -> Vec<PydanticModel> {
         // let line = lines[i].trim();
         let line = lines[i];
         if line.starts_with("class") {
-            // TODO: parse superclasses
-            // TODO: omit parens and trailing colon
-            let class_name = line.split(' ').collect::<Vec<&str>>()[1];
-            let mut fields: Vec<(String, String)> = vec![];
+            // Scan class names, including those of super classes.
+            let mut class_name = line.split(' ').collect::<Vec<&str>>()[1];
+            let parents: Vec<String>;
+            match class_name.find('(') {
+                Some(start) => {
+                    let end = class_name.find(")").unwrap();
+                    let parent_args = &class_name[start..end];
+                    parents = parent_args
+                        .split(", ")
+                        .map(|p| p.to_string())
+                        .collect::<Vec<String>>();
+                    class_name = &class_name[..start];
+                }
+                None => {
+                    eprintln!("Detected invalid syntax in class: {}", class_name);
+                    process::exit(-3);
+                }
+            };
             i += 1;
 
+            // Scan fields.
+            let mut fields: Vec<(String, String)> = vec![];
             while !lines[i].starts_with("class")
                 || !lines[i].starts_with(&format!("{}class", INDENT))
             {
+                // Remove preceding indent.
                 let curr_line = &lines[i].trim();
+
+                // In pydantic, fields are denoted as `field_name: type`.
                 if curr_line.contains(": ") {
                     let field_and_type: Vec<&str> = curr_line.split(": ").collect();
                     fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
-                    i += 1;
                 }
+
+                if i < lines.len() {
+                    break;
+                }
+                i += 1;
             }
         }
-        i += 1;
     }
     models
 }
