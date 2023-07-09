@@ -1,7 +1,8 @@
 use std::{env, format, fs, io, path::Path, process};
 
+#[derive(Debug)]
 struct PydanticModel {
-    name: String,
+    class_name: String,
     parents: Vec<String>,
     fields: Vec<(String, String)>,
 }
@@ -37,28 +38,32 @@ fn lex(source: String) -> Vec<PydanticModel> {
             };
             i += 1;
 
+            // Consume decorators and methods.
+            if lines[i].starts_with(&format!("@")) {
+                i += 1;
+                continue;
+            } else if lines[i].starts_with(&format!("{}def", INDENT)) {
+                while lines[i].starts_with(&format!("{}{}", INDENT, INDENT)) {
+                    i += 1;
+                }
+            }
+
             // Scan fields.
+            // In pydantic, fields are denoted as `field_name: type`.
             let mut fields: Vec<(String, String)> = vec![];
-            // Nested classes, e.g., `Config` in V1, *should* be filtered out... Needs testing.
-            while !lines[i].starts_with("class")
-            // || !lines[i].starts_with(&format!("{}class", INDENT))
-            {
-                // Remove preceding indent.
-                let curr_line = &lines[i].trim();
-
-                // In pydantic, fields are denoted as `field_name: type`.
-                // Filter out method signatures.
-                // TODO... filter out method impls! These might types annotations.
-                if !curr_line.contains("def") && curr_line.contains(": ") {
-                    let field_and_type: Vec<&str> = curr_line.split(": ").collect();
-                    fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
-                }
-
-                if i < lines.len() {
-                    break;
-                }
+            while lines[i].starts_with(INDENT) && lines[i].contains(": ") {
+                // Remove leading indent.
+                let curr_line = lines[i].trim();
+                let field_and_type: Vec<&str> = curr_line.split(": ").collect();
+                fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
                 i += 1;
             }
+
+            models.push(PydanticModel {
+                class_name: class_name.to_string(),
+                parents,
+                fields,
+            })
         }
     }
     models
@@ -87,6 +92,7 @@ fn main() {
         process::exit(64);
     }
     let mut source = String::new();
-    let _ = read_files(Path::new(&args[1]), &mut source);
-    dbg!("{:?}", source);
+    read_files(Path::new(&args[1]), &mut source).expect("oops");
+    let models = lex(source);
+    dbg!("{?#}", models);
 }
