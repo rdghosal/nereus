@@ -1,5 +1,7 @@
 use std::{env, format, fs, io, path::Path, process};
 
+const INDENT: &str = "    ";
+
 #[derive(Debug)]
 struct PydanticModel {
     class_name: String,
@@ -7,24 +9,26 @@ struct PydanticModel {
     fields: Vec<(String, String)>,
 }
 
-const INDENT: &str = "    ";
-
 fn lex(source: String) -> Vec<PydanticModel> {
     let mut models = vec![];
     let mut i = 0;
     let lines = source.split("\n").collect::<Vec<_>>();
+
+    // NOTE: Whitespace is significant in Python
     while i < lines.len() {
-        // Cannot trim as whitespace is significant in Python
-        // let line = lines[i].trim();
         let line = lines[i];
-        if line.starts_with("class") {
+        println!("lexing... {}", line);
+        if !line.starts_with("class") {
+            i += 1;
+        } else {
             // Scan class names, including those of super classes.
             let mut class_name = line.split(' ').collect::<Vec<&str>>()[1];
             let parents: Vec<String>;
+            println!("scanning class name {}", class_name);
             match class_name.find('(') {
                 Some(start) => {
                     let end = class_name.find(")").unwrap();
-                    let parent_args = &class_name[start..end];
+                    let parent_args = &class_name[start + 1..end];
                     parents = parent_args
                         .split(", ")
                         .map(|p| p.to_string())
@@ -40,9 +44,11 @@ fn lex(source: String) -> Vec<PydanticModel> {
 
             // Consume decorators and methods.
             if lines[i].starts_with(&format!("@")) {
+                println!("skipping decorators");
                 i += 1;
                 continue;
             } else if lines[i].starts_with(&format!("{}def", INDENT)) {
+                println!("skipping method");
                 while lines[i].starts_with(&format!("{}{}", INDENT, INDENT)) {
                     i += 1;
                 }
@@ -50,6 +56,7 @@ fn lex(source: String) -> Vec<PydanticModel> {
 
             // Scan fields.
             // In pydantic, fields are denoted as `field_name: type`.
+            println!("parsing fields");
             let mut fields: Vec<(String, String)> = vec![];
             while lines[i].starts_with(INDENT) && lines[i].contains(": ") {
                 // Remove leading indent.
@@ -59,6 +66,7 @@ fn lex(source: String) -> Vec<PydanticModel> {
                 i += 1;
             }
 
+            println!("adding model");
             models.push(PydanticModel {
                 class_name: class_name.to_string(),
                 parents,
@@ -89,7 +97,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         eprintln!("Usage: percy <path to .py files>");
-        process::exit(64);
+        process::exit(-1);
     }
     let mut source = String::new();
     read_files(Path::new(&args[1]), &mut source).expect("oops");
