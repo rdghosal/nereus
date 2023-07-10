@@ -1,12 +1,28 @@
-use std::{env, format, fs, io, path::Path, process};
+use std::{collections::HashMap, env, format, fs, io, path::Path, process};
 
 const INDENT: &str = "    ";
+const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone)]
 struct PydanticModel {
     class_name: String,
     parents: Vec<String>,
     fields: Vec<(String, String)>,
+}
+
+#[derive(Clone)]
+struct Node {
+    model: PydanticModel,
+    children: Vec<Box<Node>>,
+}
+
+impl Default for Node {
+    fn default() -> Self {
+        Node {
+            model: Default::default(),
+            children: vec![],
+        }
+    }
 }
 
 fn lex(source: String) -> Vec<PydanticModel> {
@@ -77,6 +93,49 @@ fn lex(source: String) -> Vec<PydanticModel> {
     models
 }
 
+fn parse(models: Vec<PydanticModel>) -> Node {
+    let registry: HashMap<&str, usize> = HashMap::new();
+    let mut nodes: Vec<Node> = vec![Default::default(); models.len()];
+    for (i, model) in models.iter().enumerate() {
+        registry.insert(&model.class_name, i);
+    }
+    for (i, model) in models.iter().enumerate() {
+        for parent in model.parents {
+            if !registry.contains_key(parent.as_str()) && !is_base_model(&parent) {
+                eprintln!("Found reference to undefined super class {}", parent);
+                process::exit(-4);
+            }
+            let index = registry.get(parent.as_str()).unwrap();
+            let parent_model = models[*index];
+            if nodes[*index].model.class_name == parent_model.class_name {
+                let mut parent_node = &mut nodes[*index];
+                let child_node = Node {
+                    model: *model,
+                    children: vec![],
+                };
+                parent_node.children.push(Box::new(child_node));
+                nodes[i] = child_node;
+            } else {
+                let child_node = Node {
+                    model: *model,
+                    children: vec![],
+                };
+                let parent_node = Node {
+                    model: *model,
+                    children: vec![Box::new(child_node)],
+                };
+                nodes[*index] = parent_node;
+                nodes[i] = child_node;
+            }
+        }
+    }
+    Node {}
+}
+
+fn is_base_model(class_name: &str) -> bool {
+    PYDANTIC_BASE_MODEL_REFS.contains(&class_name)
+}
+
 fn read_files(dir: &Path, source: &mut String) -> Result<(), io::Error> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
@@ -85,7 +144,7 @@ fn read_files(dir: &Path, source: &mut String) -> Result<(), io::Error> {
             if path.is_dir() {
                 read_files(&path, source)?;
             } else {
-                let contents = fs::read_to_string(entry.path()).expect("oops");
+                let contents = fs::read_to_string(entry.path())?;
                 source.push_str(&contents);
             }
         }
