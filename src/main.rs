@@ -10,17 +10,32 @@ struct PydanticModel {
     fields: Vec<(String, String)>,
 }
 
-#[derive(Clone, Debug)]
-struct Node<'a> {
-    model: PydanticModel,
-    children: Vec<Box<&'a Node<'a>>>,
+impl PydanticModel {
+    pub fn inherits_base_model(model: &PydanticModel) -> bool {
+        let mut inherits = false;
+        for parent in model.parents.iter().map(|p| p.as_str()) {
+            if is_base_model(parent) {
+                inherits = true;
+                break;
+            }
+        }
+        inherits
+    }
 }
 
-impl Default for Node<'_> {
+#[derive(Clone, Debug)]
+struct Node {
+    model: PydanticModel,
+    children: Vec<Box<Node>>,
+    is_root: bool,
+}
+
+impl Default for Node {
     fn default() -> Self {
         Node {
             model: Default::default(),
             children: vec![],
+            is_root: false,
         }
     }
 }
@@ -93,44 +108,49 @@ fn lex(source: String) -> Vec<PydanticModel> {
     models
 }
 
-fn parse(models: Vec<PydanticModel>) -> Vec<Node<'static>> {
+fn parse(models: Vec<PydanticModel>) -> Vec<Node> {
     let mut registry: HashMap<&str, usize> = HashMap::new();
     let mut roots: Vec<Node> = vec![];
-    let mut nodes: Vec<&mut Node> = vec![Default::default(); models.len()];
+    let default_node: Node = Default::default();
+    let mut nodes: Vec<Node> = vec![default_node; models.len()];
+
+    // Populate registry.
     for (i, model) in models.iter().enumerate() {
         registry.insert(&model.class_name, i);
     }
+
+    // Create nodes, identifying `roots`, whose super class is `pydantic.BaseModel`.
     for (i, model) in models.iter().enumerate() {
-        let child_node = Node {
+        let node = Node {
             model: model.clone(),
             children: vec![],
+            is_root: PydanticModel::inherits_base_model(model),
         };
-        nodes[i] = &child_node;
         for parent in model.parents.iter().map(|p| p.as_str()) {
+            if node.is_root {
+                continue;
+            }
             if !registry.contains_key(parent) && !is_base_model(parent) {
                 eprintln!("Found reference to undefined super class {}", parent);
                 process::exit(-4);
             }
-            if is_base_model(&parent) {
-                roots.push(child_node);
-                continue;
-            }
-
             let index = registry.get(parent).unwrap();
             let parent_model = &models[*index];
 
             // Check whether the node in `nodes` is a default.
             if nodes[*index].model.class_name == parent_model.class_name {
                 let parent_node = &mut nodes[*index];
-                parent_node.children.push(Box::new(&child_node));
+                parent_node.children.push(Box::new(node.clone()));
             } else {
                 let parent_node = Node {
                     model: parent_model.clone(),
-                    children: vec![Box::new(&child_node)],
+                    children: vec![Box::new(node.clone())],
+                    is_root: false,
                 };
-                nodes[*index] = &parent_node;
+                nodes[*index] = parent_node;
             }
         }
+        roots.push(nodes[i].clone());
     }
     roots
 }
