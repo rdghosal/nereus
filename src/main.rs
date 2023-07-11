@@ -10,13 +10,13 @@ struct PydanticModel {
     fields: Vec<(String, String)>,
 }
 
-#[derive(Clone)]
-struct Node {
+#[derive(Clone, Debug)]
+struct Node<'a> {
     model: PydanticModel,
-    children: Vec<Box<Node>>,
+    children: Vec<Box<&'a Node<'a>>>,
 }
 
-impl Default for Node {
+impl Default for Node<'_> {
     fn default() -> Self {
         Node {
             model: Default::default(),
@@ -93,43 +93,46 @@ fn lex(source: String) -> Vec<PydanticModel> {
     models
 }
 
-fn parse(models: Vec<PydanticModel>) -> Node {
-    let registry: HashMap<&str, usize> = HashMap::new();
-    let mut nodes: Vec<Node> = vec![Default::default(); models.len()];
+fn parse(models: Vec<PydanticModel>) -> Vec<Node<'static>> {
+    let mut registry: HashMap<&str, usize> = HashMap::new();
+    let mut roots: Vec<Node> = vec![];
+    let mut nodes: Vec<&mut Node> = vec![Default::default(); models.len()];
     for (i, model) in models.iter().enumerate() {
         registry.insert(&model.class_name, i);
     }
     for (i, model) in models.iter().enumerate() {
-        for parent in model.parents {
-            if !registry.contains_key(parent.as_str()) && !is_base_model(&parent) {
+        let child_node = Node {
+            model: model.clone(),
+            children: vec![],
+        };
+        nodes[i] = &child_node;
+        for parent in model.parents.iter().map(|p| p.as_str()) {
+            if !registry.contains_key(parent) && !is_base_model(parent) {
                 eprintln!("Found reference to undefined super class {}", parent);
                 process::exit(-4);
             }
-            let index = registry.get(parent.as_str()).unwrap();
-            let parent_model = models[*index];
+            if is_base_model(&parent) {
+                roots.push(child_node);
+                continue;
+            }
+
+            let index = registry.get(parent).unwrap();
+            let parent_model = &models[*index];
+
+            // Check whether the node in `nodes` is a default.
             if nodes[*index].model.class_name == parent_model.class_name {
-                let mut parent_node = &mut nodes[*index];
-                let child_node = Node {
-                    model: *model,
-                    children: vec![],
-                };
-                parent_node.children.push(Box::new(child_node));
-                nodes[i] = child_node;
+                let parent_node = &mut nodes[*index];
+                parent_node.children.push(Box::new(&child_node));
             } else {
-                let child_node = Node {
-                    model: *model,
-                    children: vec![],
-                };
                 let parent_node = Node {
-                    model: *model,
-                    children: vec![Box::new(child_node)],
+                    model: parent_model.clone(),
+                    children: vec![Box::new(&child_node)],
                 };
-                nodes[*index] = parent_node;
-                nodes[i] = child_node;
+                nodes[*index] = &parent_node;
             }
         }
     }
-    Node {}
+    roots
 }
 
 fn is_base_model(class_name: &str) -> bool {
@@ -161,5 +164,6 @@ fn main() {
     let mut source = String::new();
     read_files(Path::new(&args[1]), &mut source).expect("oops");
     let models = lex(source);
-    dbg!("{?#}", models);
+    let nodes = parse(models);
+    dbg!("{?#}", nodes);
 }
