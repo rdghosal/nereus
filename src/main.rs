@@ -11,9 +11,9 @@ struct PydanticModel {
 }
 
 impl PydanticModel {
-    pub fn inherits_base_model(model: &PydanticModel) -> bool {
+    pub fn inherits_base_model(&self) -> bool {
         let mut inherits = false;
-        for parent in model.parents.iter().map(|p| p.as_str()) {
+        for parent in self.parents.iter().map(|p| p.as_str()) {
             if is_base_model(parent) {
                 inherits = true;
                 break;
@@ -124,7 +124,7 @@ fn parse(models: Vec<PydanticModel>) -> Vec<Node> {
         let node = Node {
             model: model.clone(),
             children: vec![],
-            is_root: PydanticModel::inherits_base_model(model),
+            is_root: model.inherits_base_model(),
         };
         for parent in model.parents.iter().map(|p| p.as_str()) {
             if node.is_root {
