@@ -125,8 +125,11 @@ fn parse(models: Vec<PydanticModel>) -> Vec<Rc<Node>> {
             children: RefCell::new(vec![]),
             is_root: model.inherits_base_model(),
         });
+        dbg!("made node {}!", &node);
         for parent in model.parents.iter().map(|p| p.as_str()) {
+            dbg!("checking parent {}!", &parent);
             if node.is_root {
+                dbg!("found a root {}!", &parent);
                 continue;
             }
             if !registry.contains_key(parent) && !is_base_model(parent) {
@@ -149,8 +152,10 @@ fn parse(models: Vec<PydanticModel>) -> Vec<Rc<Node>> {
                 nodes[*index] = parent_node;
             }
         }
+        dbg!("adding node to list");
         nodes[i] = node;
     }
+    dbg!("returning nodes!");
     nodes
         .into_iter()
         .filter(|n| n.is_root)
@@ -162,6 +167,7 @@ fn is_base_model(class_name: &str) -> bool {
 }
 
 fn read_files(dir: &Path, source: &mut String) -> Result<(), io::Error> {
+    dbg!("using path {}", &dir);
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
@@ -186,6 +192,7 @@ fn main() {
     let mut source = String::new();
     read_files(Path::new(&args[1]), &mut source).expect("oops");
     let models = lex(source);
+    dbg!("{?#}", &models);
     let nodes = parse(models);
     dbg!("{?#}", nodes);
 }

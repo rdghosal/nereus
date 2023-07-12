@@ -1,8 +1,9 @@
 """THIRD model definition."""
 import pydantic
+from .test2 import MySecondModel
 
 
-class MyThirdModel(pydantic.BaseModel):
+class MyThirdModel(MySecondModel):
     id: pydantic.StrictInt
     name: str
 
