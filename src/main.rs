@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, format, fs, io, path::Path, process};
+use std::{cell::RefCell, collections::HashMap, env, format, fs, io, path::Path, process, rc::Rc};
 
 const INDENT: &str = "    ";
 const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
@@ -26,7 +26,7 @@ impl PydanticModel {
 #[derive(Clone, Debug)]
 struct Node {
     model: PydanticModel,
-    children: Vec<Box<Node>>,
+    children: RefCell<Vec<Rc<Node>>>,
     is_root: bool,
 }
 
@@ -34,7 +34,7 @@ impl Default for Node {
     fn default() -> Self {
         Node {
             model: Default::default(),
-            children: vec![],
+            children: RefCell::new(vec![]),
             is_root: false,
         }
     }
@@ -108,11 +108,10 @@ fn lex(source: String) -> Vec<PydanticModel> {
     models
 }
 
-fn parse(models: Vec<PydanticModel>) -> Vec<Node> {
+fn parse(models: Vec<PydanticModel>) -> Vec<Rc<Node>> {
     let mut registry: HashMap<&str, usize> = HashMap::new();
-    let mut roots: Vec<Node> = vec![];
     let default_node: Node = Default::default();
-    let mut nodes: Vec<Node> = vec![default_node; models.len()];
+    let mut nodes: Vec<Rc<Node>> = vec![Rc::new(default_node); models.len()];
 
     // Populate registry.
     for (i, model) in models.iter().enumerate() {
@@ -121,11 +120,11 @@ fn parse(models: Vec<PydanticModel>) -> Vec<Node> {
 
     // Create nodes, identifying `roots`, whose super class is `pydantic.BaseModel`.
     for (i, model) in models.iter().enumerate() {
-        let node = Node {
+        let node = Rc::new(Node {
             model: model.clone(),
-            children: vec![],
+            children: RefCell::new(vec![]),
             is_root: model.inherits_base_model(),
-        };
+        });
         for parent in model.parents.iter().map(|p| p.as_str()) {
             if node.is_root {
                 continue;
@@ -140,19 +139,22 @@ fn parse(models: Vec<PydanticModel>) -> Vec<Node> {
             // Check whether the node in `nodes` is a default.
             if nodes[*index].model.class_name == parent_model.class_name {
                 let parent_node = &mut nodes[*index];
-                parent_node.children.push(Box::new(node.clone()));
+                parent_node.children.borrow_mut().push(Rc::clone(&node));
             } else {
-                let parent_node = Node {
+                let parent_node = Rc::new(Node {
                     model: parent_model.clone(),
-                    children: vec![Box::new(node.clone())],
-                    is_root: false,
-                };
+                    children: RefCell::new(vec![Rc::clone(&node)]),
+                    is_root: model.inherits_base_model(),
+                });
                 nodes[*index] = parent_node;
             }
         }
-        roots.push(nodes[i].clone());
+        nodes[i] = node;
     }
-    roots
+    nodes
+        .into_iter()
+        .filter(|n| n.is_root)
+        .collect::<Vec<Rc<Node>>>()
 }
 
 fn is_base_model(class_name: &str) -> bool {
