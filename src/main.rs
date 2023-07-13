@@ -1,4 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, env, format, fs, io, path::Path, process, rc::Rc};
+use std::{
+    borrow::Borrow, cell::RefCell, collections::HashMap, env, format, fs, io, path::Path, process,
+    rc::Rc, str::FromStr,
+};
 
 const INDENT: &str = "    ";
 const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
@@ -183,6 +186,18 @@ fn read_files(dir: &Path, source: &mut String) -> Result<(), io::Error> {
     Ok(())
 }
 
+fn make_mermaid_cls(node: Rc<Node>, output: &mut String) -> &str {
+    let class = format!("{}class ", INDENT);
+    let inherits = " <|-- ";
+
+    let class_name = class.clone().push_str(&node.model.class_name);
+    for field in &node.model.fields {
+        output
+            .push_str(format!("\r\n{} : +{} {}", node.model.class_name, field.0, field.1).as_str());
+    }
+    output
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
@@ -194,5 +209,7 @@ fn main() {
     let models = lex(source);
     dbg!("{?#}", &models);
     let nodes = parse(models);
-    dbg!("{?#}", nodes);
+    dbg!("{?#}", &nodes);
+    let mut class_diagram = String::from_str("classDiagram").expect("oops");
+    dbg!("{}", make_mermaid_cls(nodes[0].clone(), &mut class_diagram));
 }
