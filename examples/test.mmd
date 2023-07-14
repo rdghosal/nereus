@@ -1,13 +1,18 @@
 classDiagram
+    class `pydantic.BaseModel`
+    `pydantic.BaseModel` <|-- MyFirstModel
     class MyFirstModel{
         +id pydantic.StrictInt
         +name str
     }
-    MySecondModel <|-- MyThirdModel
+    class `pydantic.BaseModel`
+    `pydantic.BaseModel` <|-- MySecondModel
     class MySecondModel{
         +id pydantic.StrictInt
         +name str
     }
+    MySecondModel <|-- MyThirdModel
+    class `pydantic.BaseModel`
     class MyThirdModel{
         +id pydantic.StrictInt
         +name str

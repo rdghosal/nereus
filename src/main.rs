@@ -188,11 +188,12 @@ fn read_files(dir: &Path, source: &mut String) -> Result<(), io::Error> {
 
 fn make_mermaid_cls(node: Rc<Node>, mut output: String) -> String {
     let inherits = " <|-- ";
-    for child in node.children.borrow().iter() {
+    output.push_str(format!("\r\n{}class `pydantic.BaseModel`", INDENT).as_str());
+    if node.is_root {
         output.push_str(
             format!(
-                "\r\n{}{}{}{}",
-                INDENT, &node.model.class_name, inherits, &child.model.class_name
+                "\r\n{}`pydantic.BaseModel`{}{}",
+                INDENT, inherits, node.model.class_name
             )
             .as_str(),
         );
@@ -203,6 +204,15 @@ fn make_mermaid_cls(node: Rc<Node>, mut output: String) -> String {
         output.push_str(format!("\r\n{}{}+{} {}", INDENT, INDENT, field.0, field.1).as_str());
     }
     output.push_str(format!("\r\n{}}}", INDENT).as_str());
+    for child in node.children.borrow().iter() {
+        output.push_str(
+            format!(
+                "\r\n{}{}{}{}",
+                INDENT, &node.model.class_name, inherits, &child.model.class_name
+            )
+            .as_str(),
+        );
+    }
     for child in node.children.borrow().iter() {
         output = make_mermaid_cls(child.clone(), output);
     }
@@ -226,5 +236,5 @@ fn main() {
     for node in nodes {
         class_diagram = make_mermaid_cls(node, class_diagram);
     }
-    fs::write("test.mermaid", class_diagram);
+    fs::write("test.mmd", class_diagram);
 }
