@@ -186,14 +186,25 @@ fn read_files(dir: &Path, source: &mut String) -> Result<(), io::Error> {
     Ok(())
 }
 
-fn make_mermaid_cls(node: Rc<Node>, output: &mut String) -> &str {
-    let class = format!("{}class ", INDENT);
+fn make_mermaid_cls(node: Rc<Node>, mut output: String) -> String {
     let inherits = " <|-- ";
-
-    let class_name = class.clone().push_str(&node.model.class_name);
+    for child in node.children.borrow().iter() {
+        output.push_str(
+            format!(
+                "\r\n{}{}{}{}",
+                INDENT, &node.model.class_name, inherits, &child.model.class_name
+            )
+            .as_str(),
+        );
+    }
+    let class_name = format!("\r\n{}class {}{{", INDENT, node.model.class_name);
+    output.push_str(class_name.as_str());
     for field in &node.model.fields {
-        output
-            .push_str(format!("\r\n{} : +{} {}", node.model.class_name, field.0, field.1).as_str());
+        output.push_str(format!("\r\n{}{}+{} {}", INDENT, INDENT, field.0, field.1).as_str());
+    }
+    output.push_str(format!("\r\n{}}}", INDENT).as_str());
+    for child in node.children.borrow().iter() {
+        output = make_mermaid_cls(child.clone(), output);
     }
     output
 }
@@ -211,5 +222,9 @@ fn main() {
     let nodes = parse(models);
     dbg!("{?#}", &nodes);
     let mut class_diagram = String::from_str("classDiagram").expect("oops");
-    dbg!("{}", make_mermaid_cls(nodes[0].clone(), &mut class_diagram));
+    // dbg!("{}", make_mermaid_cls(nodes[0].clone(), class_diagram));
+    for node in nodes {
+        class_diagram = make_mermaid_cls(node, class_diagram);
+    }
+    fs::write("test.mermaid", class_diagram);
 }
