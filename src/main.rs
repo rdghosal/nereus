@@ -1,7 +1,4 @@
-use std::{
-    borrow::Borrow, cell::RefCell, collections::HashMap, env, format, fs, io, path::Path, process,
-    rc::Rc, str::FromStr,
-};
+use std::{cell::RefCell, collections::HashMap, env, format, fs, io, path::Path, process, rc::Rc};
 
 const INDENT: &str = "    ";
 const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
@@ -186,37 +183,30 @@ fn read_files(dir: &Path, source: &mut String) -> Result<(), io::Error> {
     Ok(())
 }
 
-fn make_mermaid_cls(node: Rc<Node>, mut output: String) -> String {
+fn make_mermaid_cls(node: Rc<Node>, mut lines: Vec<String>) -> Vec<String> {
     let inherits = " <|-- ";
-    output.push_str(format!("\r\n{}class `pydantic.BaseModel`", INDENT).as_str());
     if node.is_root {
-        output.push_str(
-            format!(
-                "\r\n{}`pydantic.BaseModel`{}{}",
-                INDENT, inherits, node.model.class_name
-            )
-            .as_str(),
-        );
+        lines.push(format!(
+            "{}`pydantic.BaseModel`{}{}",
+            INDENT, inherits, node.model.class_name
+        ));
     }
-    let class_name = format!("\r\n{}class {}{{", INDENT, node.model.class_name);
-    output.push_str(class_name.as_str());
+    let class_name = format!("{}class {}{{", INDENT, node.model.class_name);
+    lines.push(class_name);
     for field in &node.model.fields {
-        output.push_str(format!("\r\n{}{}+{} {}", INDENT, INDENT, field.0, field.1).as_str());
+        lines.push(format!("{}{}+{} {}", INDENT, INDENT, field.0, field.1));
     }
-    output.push_str(format!("\r\n{}}}", INDENT).as_str());
+    lines.push(format!("{}}}", INDENT));
     for child in node.children.borrow().iter() {
-        output.push_str(
-            format!(
-                "\r\n{}{}{}{}",
-                INDENT, &node.model.class_name, inherits, &child.model.class_name
-            )
-            .as_str(),
-        );
+        lines.push(format!(
+            "{}{}{}{}",
+            INDENT, &node.model.class_name, inherits, &child.model.class_name
+        ));
     }
     for child in node.children.borrow().iter() {
-        output = make_mermaid_cls(child.clone(), output);
+        lines = make_mermaid_cls(child.clone(), lines);
     }
-    output
+    lines
 }
 
 fn main() {
@@ -231,10 +221,16 @@ fn main() {
     dbg!("{?#}", &models);
     let nodes = parse(models);
     dbg!("{?#}", &nodes);
-    let mut class_diagram = String::from_str("classDiagram").expect("oops");
-    // dbg!("{}", make_mermaid_cls(nodes[0].clone(), class_diagram));
-    for node in nodes {
-        class_diagram = make_mermaid_cls(node, class_diagram);
+    let mut lines = vec![
+        "classDiagram".to_string(),
+        format!("{}class `pydantic.BaseModel`", INDENT),
+    ];
+    if nodes.is_empty() {
+        eprintln!("Failed to identify child classes of `pydantic.BaseModel`");
+        process::exit(-5)
     }
-    fs::write("test.mmd", class_diagram);
+    for node in nodes {
+        lines = make_mermaid_cls(node, lines);
+    }
+    fs::write("test.mmd", lines.join("\r\n")).expect("oopsie");
 }
