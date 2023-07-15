@@ -8,6 +8,7 @@ struct PydanticModel {
     class_name: String,
     parents: Vec<String>,
     fields: Vec<(String, String)>,
+    methods: Vec<(String, String)>,
 }
 
 impl PydanticModel {
@@ -40,6 +41,52 @@ impl Default for Node {
     }
 }
 
+fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> (String, Vec<(String, Option<String>)>) {
+    // Remove indent and trailing spaces.
+    let method_signature = lines[*curr_pos].trim();
+    let mut open_parens: usize;
+    match method_signature.find('(') {
+        Some(index) => open_parens = index,
+        None => {
+            eprintln!("Failed to scan method. Opening parenthesis not found.");
+            process::exit(-5);
+        }
+    };
+    // TODO: consume args
+    // TODO: account for \ and *
+    let method_name = method_signature.split(' ').collect::<Vec<&str>>()[1];
+    method_signature.chars().nth(open_parens + 1);
+    let mut args: Vec<(String, Option<String>)> = vec![];
+    while !lines[*curr_pos].contains(')') {
+        let line = lines[*curr_pos].trim();
+        let args_ = line.split(',').map(|a| a.trim());
+        for a in args_ {
+            if a == "\\" || a == "*" {
+                continue;
+            }
+            let field_and_type: Vec<&str> = a.split(':').collect();
+            let arg = (
+                field_and_type[0].to_string(),
+                if field_and_type.len() == 1 {
+                    None
+                } else {
+                    Some(field_and_type[1].to_string())
+                },
+            );
+            args.push(arg);
+        }
+        *curr_pos += 1;
+        if *curr_pos == lines.len() {
+            eprintln!(
+                "Failed to find closing parenthesis to parameters defined for method {}",
+                method_name
+            );
+            process::exit(-6);
+        }
+    }
+    (method_name.to_string(), args)
+}
+
 fn lex(source: String) -> Vec<PydanticModel> {
     let mut models = vec![];
     let mut i = 0;
@@ -52,8 +99,11 @@ fn lex(source: String) -> Vec<PydanticModel> {
         if !line.starts_with("class") {
             i += 1;
         } else {
-            // Scan class names, including those of super classes.
             let mut class_name = line.split(' ').collect::<Vec<&str>>()[1];
+            let mut fields: Vec<(String, String)> = vec![];
+            let mut methods: Vec<(String, String)> = vec![];
+
+            // Scan class names, including those of super classes.
             let parents: Vec<String>;
             println!("scanning class name {}", class_name);
             match class_name.find('(') {
@@ -79,16 +129,16 @@ fn lex(source: String) -> Vec<PydanticModel> {
                 i += 1;
                 continue;
             } else if lines[i].starts_with(&format!("{}def", INDENT)) {
-                println!("skipping method");
-                while lines[i].starts_with(&format!("{}{}", INDENT, INDENT)) {
-                    i += 1;
-                }
+                // println!("skipping method");
+                // while lines[i].starts_with(&format!("{}{}", INDENT, INDENT)) {
+                //     i += 1;
+                // }
+                methods.push(scan_method(&lines, &mut i));
             }
 
             // Scan fields.
             // In pydantic, fields are denoted as `field_name: type`.
             println!("parsing fields");
-            let mut fields: Vec<(String, String)> = vec![];
             while lines[i].starts_with(INDENT) && lines[i].contains(": ") {
                 // Remove leading indent.
                 let curr_line = lines[i].trim();
@@ -102,6 +152,7 @@ fn lex(source: String) -> Vec<PydanticModel> {
                 class_name: class_name.to_string(),
                 parents,
                 fields,
+                methods,
             })
         }
     }
