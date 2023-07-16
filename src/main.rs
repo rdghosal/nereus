@@ -8,7 +8,7 @@ struct PydanticModel {
     class_name: String,
     parents: Vec<String>,
     fields: Vec<(String, String)>,
-    methods: Vec<(String, String)>,
+    methods: Vec<(String, Vec<(String, Option<String>)>)>,
 }
 
 impl PydanticModel {
@@ -44,23 +44,25 @@ impl Default for Node {
 fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> (String, Vec<(String, Option<String>)>) {
     // Remove indent and trailing spaces.
     let method_signature = lines[*curr_pos].trim();
-    let mut open_parens: usize;
-    match method_signature.find('(') {
-        Some(index) => open_parens = index,
-        None => {
-            eprintln!("Failed to scan method. Opening parenthesis not found.");
-            process::exit(-5);
-        }
-    };
-    // TODO: consume args
-    // TODO: account for \ and *
-    let method_name = method_signature.split(' ').collect::<Vec<&str>>()[1];
-    method_signature.chars().nth(open_parens + 1);
+    if !method_signature.contains('(') {
+        eprintln!(
+            "Failed to find opening parenthesis in method signature {}",
+            method_signature
+        );
+        process::exit(-7);
+    }
+
+    let mut method_name = method_signature.split('(').collect::<Vec<&str>>()[0];
+    method_name.replace(format!("{}def ", INDENT).as_str(), "");
+
     let mut args: Vec<(String, Option<String>)> = vec![];
-    while !lines[*curr_pos].contains(')') {
+    let mut found_closing_parens = false;
+    while !found_closing_parens {
+        found_closing_parens = lines[*curr_pos].contains(')');
         let line = lines[*curr_pos].trim();
         let args_ = line.split(',').map(|a| a.trim());
         for a in args_ {
+            let a = a.replace(")", "");
             if a == "\\" || a == "*" {
                 continue;
             }
@@ -76,7 +78,8 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> (String, Vec<(String,
             args.push(arg);
         }
         *curr_pos += 1;
-        if *curr_pos == lines.len() {
+
+        if *curr_pos == lines.len() && !found_closing_parens {
             eprintln!(
                 "Failed to find closing parenthesis to parameters defined for method {}",
                 method_name
@@ -101,7 +104,7 @@ fn lex(source: String) -> Vec<PydanticModel> {
         } else {
             let mut class_name = line.split(' ').collect::<Vec<&str>>()[1];
             let mut fields: Vec<(String, String)> = vec![];
-            let mut methods: Vec<(String, String)> = vec![];
+            let mut methods: Vec<(String, Vec<(String, Option<String>)>)> = vec![];
 
             // Scan class names, including those of super classes.
             let parents: Vec<String>;
