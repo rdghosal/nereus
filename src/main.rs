@@ -64,16 +64,32 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> PyMethod {
 
     let mut args: Vec<(String, Option<String>)> = vec![];
     let mut found_closing_parens = false;
+    let mut returns: Option<String> = Option::None;
 
     while !found_closing_parens {
         let mut line = lines[*curr_pos].trim();
-        found_closing_parens = line.contains(')');
         if let Option::Some(pos) = line.find('(') {
             line = &line[pos + 1..];
         }
+
+        // Parse return.
+        found_closing_parens = line.contains(')');
+        if found_closing_parens {
+            let arg_and_return = line.split(')').map(|s| s.trim()).collect::<Vec<&str>>();
+            line = arg_and_return[0];
+            let returns_ = arg_and_return[1]
+                .replace(":", "")
+                .replace("->", "")
+                .trim()
+                .to_string();
+            if !returns_.is_empty() {
+                returns = Option::Some(returns_);
+            }
+        }
+
+        // Parse arguments.
         let args_ = line.split(',').map(|a| a.trim());
         for a in args_ {
-            let a = a.replace("):", "");
             if a == "\\" || a == "*" || a == "" {
                 continue;
             }
@@ -101,7 +117,7 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> PyMethod {
     PyMethod {
         name: method_name,
         args,
-        returns: Option::None,
+        returns,
     }
 }
 
@@ -127,8 +143,8 @@ mod test {
             "    def my_method(",
             "        self,",
             "        value: typing.Any",
-            "    ):",
-            "        print(value)",
+            "    ) -> list[str | tuple[str, str]]:",
+            "        return ['hello world!']",
         ];
         let mut pos = 0;
         let out = scan_method(&lines, &mut pos);
@@ -140,7 +156,7 @@ mod test {
     fn test_scan_method_3() {
         let lines = vec![
             "    def my_method(self,",
-            "        value: typing.Any):",
+            "        value: typing.Any) -> None:",
             "        print(value)",
         ];
         let mut pos = 0;
