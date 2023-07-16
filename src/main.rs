@@ -52,18 +52,21 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> (String, Vec<(String,
         process::exit(-7);
     }
 
-    let mut method_name = method_signature.split('(').collect::<Vec<&str>>()[0];
-    method_name.replace(format!("{}def ", INDENT).as_str(), "");
+    let method_name = method_signature.split('(').collect::<Vec<&str>>()[0];
+    let method_name = method_name.replace("def ", "");
 
     let mut args: Vec<(String, Option<String>)> = vec![];
     let mut found_closing_parens = false;
     while !found_closing_parens {
-        found_closing_parens = lines[*curr_pos].contains(')');
-        let line = lines[*curr_pos].trim();
+        let mut line = lines[*curr_pos].trim();
+        found_closing_parens = line.contains(')');
+        if let Option::Some(pos) = line.find('(') {
+            line = &line[pos + 1..];
+        }
         let args_ = line.split(',').map(|a| a.trim());
         for a in args_ {
-            let a = a.replace(")", "");
-            if a == "\\" || a == "*" {
+            let a = a.replace("):", "");
+            if a == "\\" || a == "*" || a == "" {
                 continue;
             }
             let field_and_type: Vec<&str> = a.split(':').collect();
@@ -72,7 +75,7 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> (String, Vec<(String,
                 if field_and_type.len() == 1 {
                     None
                 } else {
-                    Some(field_and_type[1].to_string())
+                    Some(field_and_type[1].trim().to_string())
                 },
             );
             args.push(arg);
@@ -88,6 +91,51 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> (String, Vec<(String,
         }
     }
     (method_name.to_string(), args)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_scan_method_1() {
+        let lines = vec![
+            "    def my_method(self, value: typing.Any):",
+            "        print(value)",
+        ];
+        let mut pos = 0;
+        let out = scan_method(&lines, &mut pos);
+        dbg!("{}", out);
+        dbg!("{}", pos);
+    }
+
+    #[test]
+    fn test_scan_method_2() {
+        let lines = vec![
+            "    def my_method(",
+            "        self,",
+            "        value: typing.Any",
+            "    ):",
+            "        print(value)",
+        ];
+        let mut pos = 0;
+        let out = scan_method(&lines, &mut pos);
+        dbg!("{}", out);
+        dbg!("{}", pos);
+    }
+
+    #[test]
+    fn test_scan_method_3() {
+        let lines = vec![
+            "    def my_method(self,",
+            "        value: typing.Any):",
+            "        print(value)",
+        ];
+        let mut pos = 0;
+        let out = scan_method(&lines, &mut pos);
+        dbg!("{}", out);
+        dbg!("{}", pos);
+    }
 }
 
 fn lex(source: String) -> Vec<PydanticModel> {
