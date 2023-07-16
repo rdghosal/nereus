@@ -3,12 +3,19 @@ use std::{cell::RefCell, collections::HashMap, env, format, fs, io, path::Path, 
 const INDENT: &str = "    ";
 const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
 
+#[derive(Clone, Debug)]
+struct PyMethod {
+    name: String,
+    args: Vec<(String, Option<String>)>,
+    returns: Option<String>,
+}
+
 #[derive(Debug, Default, Clone)]
 struct PydanticModel {
     class_name: String,
     parents: Vec<String>,
     fields: Vec<(String, String)>,
-    methods: Vec<(String, Vec<(String, Option<String>)>)>,
+    methods: Vec<PyMethod>,
 }
 
 impl PydanticModel {
@@ -41,7 +48,7 @@ impl Default for Node {
     }
 }
 
-fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> (String, Vec<(String, Option<String>)>) {
+fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> PyMethod {
     // Remove indent and trailing spaces.
     let method_signature = lines[*curr_pos].trim();
     if !method_signature.contains('(') {
@@ -57,6 +64,7 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> (String, Vec<(String,
 
     let mut args: Vec<(String, Option<String>)> = vec![];
     let mut found_closing_parens = false;
+
     while !found_closing_parens {
         let mut line = lines[*curr_pos].trim();
         found_closing_parens = line.contains(')');
@@ -90,7 +98,11 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> (String, Vec<(String,
             process::exit(-6);
         }
     }
-    (method_name.to_string(), args)
+    PyMethod {
+        name: method_name,
+        args,
+        returns: Option::None,
+    }
 }
 
 #[cfg(test)]
@@ -152,7 +164,7 @@ fn lex(source: String) -> Vec<PydanticModel> {
         } else {
             let mut class_name = line.split(' ').collect::<Vec<&str>>()[1];
             let mut fields: Vec<(String, String)> = vec![];
-            let mut methods: Vec<(String, Vec<(String, Option<String>)>)> = vec![];
+            let mut methods: Vec<PyMethod> = vec![];
 
             // Scan class names, including those of super classes.
             let parents: Vec<String>;
