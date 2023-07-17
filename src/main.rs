@@ -184,7 +184,18 @@ fn lex(source: String) -> Vec<PydanticModel> {
     let mut i = 0;
     let lines = source
         .split("\n")
-        .filter(|s| !s.starts_with(&format!("{}{}", INDENT, INDENT)) && !s.trim().is_empty())
+        .filter(|s| {
+            let is_scoped = s.starts_with(&format!("{}{}", INDENT, INDENT));
+            let trimmed = s.trim();
+            !is_scoped
+                && !trimmed.is_empty()
+                && !trimmed.starts_with("import")
+                && !trimmed.starts_with("from")
+                && !trimmed.starts_with("&")
+                && !trimmed.starts_with("\"\"\"")
+                && !trimmed.starts_with("'''")
+                && !trimmed.starts_with("#")
+        })
         .collect::<Vec<_>>();
     dbg!("{}", &lines);
 
@@ -200,14 +211,13 @@ fn lex(source: String) -> Vec<PydanticModel> {
 
             // Scan class names, including those of super classes.
             let parents: Vec<String>;
-            // println!("scanning class name {}", class_name);
             match class_name.find('(') {
                 Some(start) => {
                     let end = class_name.find(")").unwrap();
                     let parent_args = &class_name[start + 1..end];
                     parents = parent_args
-                        .split(", ")
-                        .map(|p| p.to_string())
+                        .split(",")
+                        .map(|p| p.trim().to_string())
                         .collect::<Vec<String>>();
                     class_name = &class_name[..start];
                 }
@@ -226,6 +236,7 @@ fn lex(source: String) -> Vec<PydanticModel> {
                 println!("consuming... {}", lines[i]);
                 let curr_line = lines[i].trim();
                 let field_and_type: Vec<&str> = curr_line.split(": ").collect();
+                // TODO: ignore default arguments and fields
                 fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
                 i += 1;
             }
