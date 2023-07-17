@@ -3,11 +3,19 @@ use std::{cell::RefCell, collections::HashMap, env, format, fs, io, path::Path, 
 const INDENT: &str = "    ";
 const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
 
+#[derive(Default, Debug, Clone)]
+enum PyMethodAccess {
+    #[default]
+    Public,
+    Private,
+}
+
 #[derive(Clone, Debug)]
 struct PyMethod {
     name: String,
     args: Vec<(String, Option<String>)>,
     returns: Option<String>,
+    access: PyMethodAccess,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -115,9 +123,14 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> PyMethod {
         }
     }
     PyMethod {
-        name: method_name,
+        name: method_name.clone(),
         args,
         returns,
+        access: if method_name.starts_with('_') {
+            PyMethodAccess::Private
+        } else {
+            PyMethodAccess::Public
+        },
     }
 }
 
@@ -343,7 +356,13 @@ fn make_mermaid_cls(node: Rc<Node>, mut lines: Vec<String>) -> Vec<String> {
         lines.push(format!("{}{}+{} {}", INDENT, INDENT, field.0, field.1));
     }
     for method in &node.model.methods {
-        let mut method_str = format!("{}{}+{}(", INDENT, INDENT, method.name,);
+        let access_modifier: &str;
+        match method.access {
+            PyMethodAccess::Public => access_modifier = "+",
+            PyMethodAccess::Private => access_modifier = "-",
+        }
+
+        let mut method_str = format!("{}{}{}{}(", INDENT, INDENT, access_modifier, method.name,);
         let mut args: Vec<String> = vec![];
         for (arg_name, type_) in method.args.clone() {
             let type_ = type_.unwrap_or_default();

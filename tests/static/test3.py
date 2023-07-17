@@ -11,4 +11,6 @@ class MyThirdModel(MySecondModel):
     def check_id(cls, v: pydantic.StrictInt) -> pydantic.StrictInt:
         if v < 1:
             raise ValueError("`id` must be positive, non-zero value.")
-        return v
+
+    def _increase_id(self) -> None:
+        self.id += 1

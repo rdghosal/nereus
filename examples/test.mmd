@@ -4,6 +4,7 @@ classDiagram
     class MyFirstModel{
         +id pydantic.StrictInt
         +name str
+        +get_random_list(self) list[int | float]
     }
     `pydantic.BaseModel` <|-- MySecondModel
     class MySecondModel{
@@ -15,4 +16,5 @@ classDiagram
     class MyThirdModel{
         +id pydantic.StrictInt
         +name str
+        -_increase_id(self) None
     }
