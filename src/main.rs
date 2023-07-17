@@ -240,9 +240,6 @@ fn lex(source: String) -> Vec<PydanticModel> {
                     methods.push(scan_method(&lines, &mut i));
                 }
             }
-            dbg!("{}", &methods);
-
-            // println!("adding model");
             models.push(PydanticModel {
                 class_name: class_name.to_string(),
                 parents,
@@ -361,6 +358,9 @@ fn make_mermaid_cls(node: Rc<Node>, mut lines: Vec<String>) -> Vec<String> {
             method_str.push_str(args_str.as_str());
         }
         method_str.push_str(")");
+        if let Option::Some(return_type) = &method.returns {
+            method_str.push_str(format!(" {}", return_type).as_str());
+        }
         lines.push(method_str);
     }
     lines.push(format!("{}}}", INDENT));
