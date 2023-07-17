@@ -11,3 +11,7 @@ class MySecondModel(pydantic.BaseModel):
         if v < 1:
             raise ValueError("`id` must be positive, non-zero value.")
         return v
+
+    @property
+    def key(self) -> str:
+        return f"{self.id}{self.name}"

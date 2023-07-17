@@ -169,12 +169,15 @@ mod test {
 fn lex(source: String) -> Vec<PydanticModel> {
     let mut models = vec![];
     let mut i = 0;
-    let lines = source.split("\n").collect::<Vec<_>>();
+    let lines = source
+        .split("\n")
+        .filter(|s| !s.starts_with(&format!("{}{}", INDENT, INDENT)) && !s.trim().is_empty())
+        .collect::<Vec<_>>();
+    dbg!("{}", &lines);
 
     // NOTE: Whitespace is significant in Python
     while i < lines.len() {
         let line = lines[i];
-        println!("lexing... {}", line);
         if !line.starts_with("class") {
             i += 1;
         } else {
@@ -184,7 +187,7 @@ fn lex(source: String) -> Vec<PydanticModel> {
 
             // Scan class names, including those of super classes.
             let parents: Vec<String>;
-            println!("scanning class name {}", class_name);
+            // println!("scanning class name {}", class_name);
             match class_name.find('(') {
                 Some(start) => {
                     let end = class_name.find(")").unwrap();
@@ -202,31 +205,44 @@ fn lex(source: String) -> Vec<PydanticModel> {
             };
             i += 1;
 
-            // Consume decorators and methods.
-            if lines[i].starts_with(&format!("@")) {
-                println!("skipping decorators");
-                i += 1;
-                continue;
-            } else if lines[i].starts_with(&format!("{}def", INDENT)) {
-                // println!("skipping method");
-                // while lines[i].starts_with(&format!("{}{}", INDENT, INDENT)) {
-                //     i += 1;
-                // }
-                methods.push(scan_method(&lines, &mut i));
-            }
-
             // Scan fields.
             // In pydantic, fields are denoted as `field_name: type`.
-            println!("parsing fields");
+            // println!("parsing fields");
             while lines[i].starts_with(INDENT) && lines[i].contains(": ") {
                 // Remove leading indent.
+                println!("consuming... {}", lines[i]);
                 let curr_line = lines[i].trim();
                 let field_and_type: Vec<&str> = curr_line.split(": ").collect();
                 fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
                 i += 1;
             }
 
-            println!("adding model");
+            // Consume decorators and methods.
+            println!("lexing... {}", lines[i]);
+            while i < lines.len()
+                && (lines[i].starts_with(&format!("{}def", INDENT))
+                    || lines[i].starts_with(&format!("{}@", INDENT)))
+            {
+                if lines[i].starts_with(&format!("{}@", INDENT)) {
+                    dbg!("{}", &lines[i]);
+                    let is_validator = lines[i].contains("validator");
+                    i += 1;
+                    if is_validator {
+                        println!("skipping validator");
+                        i += 1;
+                        if i == lines.len() {
+                            break;
+                        }
+                        continue;
+                    }
+                }
+                if lines[i].starts_with(&format!("{}def", INDENT)) {
+                    methods.push(scan_method(&lines, &mut i));
+                }
+            }
+            dbg!("{}", &methods);
+
+            // println!("adding model");
             models.push(PydanticModel {
                 class_name: class_name.to_string(),
                 parents,
@@ -255,11 +271,11 @@ fn parse(models: Vec<PydanticModel>) -> Vec<Rc<Node>> {
             children: RefCell::new(vec![]),
             is_root: model.inherits_base_model(),
         });
-        dbg!("made node {}!", &node);
+        // dbg!("made node {}!", &node);
         for parent in model.parents.iter().map(|p| p.as_str()) {
-            dbg!("checking parent {}!", &parent);
+            // dbg!("checking parent {}!", &parent);
             if node.is_root {
-                dbg!("found a root {}!", &parent);
+                // dbg!("found a root {}!", &parent);
                 continue;
             }
             if !registry.contains_key(parent) && !is_base_model(parent) {
@@ -282,10 +298,10 @@ fn parse(models: Vec<PydanticModel>) -> Vec<Rc<Node>> {
                 nodes[*index] = parent_node;
             }
         }
-        dbg!("adding node to list");
+        // dbg!("adding node to list");
         nodes[i] = node;
     }
-    dbg!("returning nodes!");
+    // dbg!("returning nodes!");
     nodes
         .into_iter()
         .filter(|n| n.is_root)
@@ -297,7 +313,7 @@ fn is_base_model(class_name: &str) -> bool {
 }
 
 fn read_files(dir: &Path, source: &mut String) -> Result<(), io::Error> {
-    dbg!("using path {}", &dir);
+    // dbg!("using path {}", &dir);
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
@@ -314,6 +330,7 @@ fn read_files(dir: &Path, source: &mut String) -> Result<(), io::Error> {
 }
 
 fn make_mermaid_cls(node: Rc<Node>, mut lines: Vec<String>) -> Vec<String> {
+    // Declare relationship with pydantic.BaseModel.
     let inherits = " <|-- ";
     if node.is_root {
         lines.push(format!(
@@ -321,12 +338,35 @@ fn make_mermaid_cls(node: Rc<Node>, mut lines: Vec<String>) -> Vec<String> {
             INDENT, inherits, node.model.class_name
         ));
     }
+
+    // Define class as well as the fields and methods therein.
     let class_name = format!("{}class {}{{", INDENT, node.model.class_name);
     lines.push(class_name);
     for field in &node.model.fields {
         lines.push(format!("{}{}+{} {}", INDENT, INDENT, field.0, field.1));
     }
+    for method in &node.model.methods {
+        let mut method_str = format!("{}{}+{}(", INDENT, INDENT, method.name,);
+        let mut args: Vec<String> = vec![];
+        for (arg_name, type_) in method.args.clone() {
+            let type_ = type_.unwrap_or_default();
+            if type_.is_empty() {
+                args.push(arg_name);
+            } else {
+                args.push(format!("{} {}", type_, arg_name));
+            }
+        }
+        if args.len() > 0 {
+            let args_str = args.join(", ");
+            method_str.push_str(args_str.as_str());
+        }
+        method_str.push_str(")");
+        lines.push(method_str);
+    }
     lines.push(format!("{}}}", INDENT));
+
+    // Declare relationship with child classes, whose respective
+    // class definitions are to follow.
     for child in node.children.borrow().iter() {
         lines.push(format!(
             "{}{}{}{}",
@@ -348,9 +388,9 @@ fn main() {
     let mut source = String::new();
     read_files(Path::new(&args[1]), &mut source).expect("oops");
     let models = lex(source);
-    dbg!("{?#}", &models);
+    // dbg!("{?#}", &models);
     let nodes = parse(models);
-    dbg!("{?#}", &nodes);
+    // dbg!("{?#}", &nodes);
     let mut lines = vec![
         "classDiagram".to_string(),
         format!("{}class `pydantic.BaseModel`", INDENT),

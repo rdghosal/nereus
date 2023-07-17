@@ -9,6 +9,7 @@ classDiagram
     class MySecondModel{
         +id pydantic.StrictInt
         +name str
+        +key(self)
     }
     MySecondModel <|-- MyThirdModel
     class MyThirdModel{
