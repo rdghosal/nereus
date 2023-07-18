@@ -1,4 +1,4 @@
-use crate::lexer::PydanticModel;
+use crate::scanner::PydanticModel;
 use std::{cell::RefCell, collections::HashMap, process, rc::Rc};
 
 #[derive(Clone, Debug)]

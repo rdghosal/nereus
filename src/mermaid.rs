@@ -1,4 +1,4 @@
-use crate::{consts, lexer::PyMethodAccess, parser::Node};
+use crate::{consts, parser::Node, scanner::PyMethodAccess};
 use std::rc::Rc;
 
 pub fn make(node: Rc<Node>, lines: &mut Vec<String>) {
