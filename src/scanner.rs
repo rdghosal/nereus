@@ -93,7 +93,6 @@ pub fn lex(source: String) -> Vec<PydanticModel> {
 
             // Scan fields.
             // In pydantic, fields are denoted as `field_name: type`.
-            // println!("parsing fields");
             while lines[i].starts_with(consts::INDENT) && lines[i].contains(": ") {
                 // Remove leading consts::INDENT.
                 let curr_line = lines[i].trim();
@@ -113,9 +112,6 @@ pub fn lex(source: String) -> Vec<PydanticModel> {
                     i += 1;
                     if is_validator {
                         i += 1;
-                        if i == lines.len() {
-                            break;
-                        }
                         continue;
                     }
                 }
