@@ -1,8 +1,47 @@
+use crate::consts;
 use std::process;
 
-use crate::models::{PyMethod, PyMethodAccess, PydanticModel};
+const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
 
-pub const INDENT: &str = "    ";
+#[derive(Default, Debug, Clone)]
+pub enum PyMethodAccess {
+    #[default]
+    Public,
+    Private,
+}
+
+#[derive(Clone, Debug)]
+pub struct PyMethod {
+    pub name: String,
+    pub args: Vec<(String, Option<String>)>,
+    pub returns: Option<String>,
+    pub access: PyMethodAccess,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct PydanticModel {
+    pub class_name: String,
+    pub parents: Vec<String>,
+    pub fields: Vec<(String, String)>,
+    pub methods: Vec<PyMethod>,
+}
+
+impl PydanticModel {
+    pub fn is_base_model(class_name: &String) -> bool {
+        PYDANTIC_BASE_MODEL_REFS.contains(&class_name.as_str())
+    }
+
+    pub fn inherits_base_model(&self) -> bool {
+        let mut inherits = false;
+        for parent in self.parents.iter() {
+            if PydanticModel::is_base_model(&parent) {
+                inherits = true;
+                break;
+            }
+        }
+        inherits
+    }
+}
 
 pub fn lex(source: String) -> Vec<PydanticModel> {
     let mut models = vec![];
@@ -10,7 +49,7 @@ pub fn lex(source: String) -> Vec<PydanticModel> {
     let lines = source
         .split("\n")
         .filter(|s| {
-            let is_scoped = s.starts_with(&format!("{}{}", INDENT, INDENT));
+            let is_scoped = s.starts_with(&format!("{}{}", consts::INDENT, consts::INDENT));
             let trimmed = s.trim();
             !is_scoped
                 && !trimmed.is_empty()
@@ -22,7 +61,6 @@ pub fn lex(source: String) -> Vec<PydanticModel> {
                 && !trimmed.starts_with("#")
         })
         .collect::<Vec<_>>();
-    dbg!("{}", &lines);
 
     // NOTE: Whitespace is significant in Python
     while i < lines.len() {
@@ -56,9 +94,8 @@ pub fn lex(source: String) -> Vec<PydanticModel> {
             // Scan fields.
             // In pydantic, fields are denoted as `field_name: type`.
             // println!("parsing fields");
-            while lines[i].starts_with(INDENT) && lines[i].contains(": ") {
-                // Remove leading indent.
-                println!("consuming... {}", lines[i]);
+            while lines[i].starts_with(consts::INDENT) && lines[i].contains(": ") {
+                // Remove leading consts::INDENT.
                 let curr_line = lines[i].trim();
                 let field_and_type: Vec<&str> = curr_line.split(": ").collect();
                 // TODO: ignore default arguments and fields
@@ -67,17 +104,14 @@ pub fn lex(source: String) -> Vec<PydanticModel> {
             }
 
             // Consume decorators and methods.
-            println!("lexing... {}", lines[i]);
             while i < lines.len()
-                && (lines[i].starts_with(&format!("{}def", INDENT))
-                    || lines[i].starts_with(&format!("{}@", INDENT)))
+                && (lines[i].starts_with(&format!("{}def", consts::INDENT))
+                    || lines[i].starts_with(&format!("{}@", consts::INDENT)))
             {
-                if lines[i].starts_with(&format!("{}@", INDENT)) {
-                    dbg!("{}", &lines[i]);
+                if lines[i].starts_with(&format!("{}@", consts::INDENT)) {
                     let is_validator = lines[i].contains("validator");
                     i += 1;
                     if is_validator {
-                        println!("skipping validator");
                         i += 1;
                         if i == lines.len() {
                             break;
@@ -85,7 +119,7 @@ pub fn lex(source: String) -> Vec<PydanticModel> {
                         continue;
                     }
                 }
-                if lines[i].starts_with(&format!("{}def", INDENT)) {
+                if lines[i].starts_with(&format!("{}def", consts::INDENT)) {
                     methods.push(scan_method(&lines, &mut i));
                 }
             }
@@ -101,7 +135,7 @@ pub fn lex(source: String) -> Vec<PydanticModel> {
 }
 
 fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> PyMethod {
-    // Remove indent and trailing spaces.
+    // Remove consts::INDENT and trailing spaces.
     let method_signature = lines[*curr_pos].trim();
     if !method_signature.contains('(') {
         eprintln!(
@@ -183,19 +217,18 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_scan_method_1() {
+    fn test_same_line_method_scan() {
         let lines = vec![
             "    def my_method(self, value: typing.Any):",
             "        print(value)",
         ];
         let mut pos = 0;
-        let out = scan_method(&lines, &mut pos);
-        dbg!("{}", out);
-        dbg!("{}", pos);
+        let _ = scan_method(&lines, &mut pos);
+        assert_eq!(pos, 1);
     }
 
     #[test]
-    fn test_scan_method_2() {
+    fn test_listed_arg_method_scan() {
         let lines = vec![
             "    def my_method(",
             "        self,",
@@ -204,21 +237,19 @@ mod test {
             "        return ['hello world!']",
         ];
         let mut pos = 0;
-        let out = scan_method(&lines, &mut pos);
-        dbg!("{}", out);
-        dbg!("{}", pos);
+        let _ = scan_method(&lines, &mut pos);
+        assert_eq!(pos, 4);
     }
 
     #[test]
-    fn test_scan_method_3() {
+    fn test_staggered_arg_method_scan() {
         let lines = vec![
             "    def my_method(self,",
             "        value: typing.Any) -> None:",
             "        print(value)",
         ];
         let mut pos = 0;
-        let out = scan_method(&lines, &mut pos);
-        dbg!("{}", out);
-        dbg!("{}", pos);
+        let _ = scan_method(&lines, &mut pos);
+        assert_eq!(pos, 2);
     }
 }

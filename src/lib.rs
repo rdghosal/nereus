@@ -1,3 +1,4 @@
+mod consts;
 pub mod lexer;
-pub mod models;
+pub mod mermaid;
 pub mod parser;
