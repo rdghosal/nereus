@@ -13,7 +13,7 @@ fn main() {
     let nodes = parser::parse(scanner::lex(src));
     let mut lines = vec![];
     for node in nodes {
-        mermaid::make(node, &mut lines);
+        mermaid::ClassDiagram::make(node, &mut lines);
     }
     fs::write("test.mmd", lines.join("\r\n")).expect("Failed to write output to file.");
 }
