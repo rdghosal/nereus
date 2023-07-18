@@ -20,8 +20,10 @@ impl Default for Node {
 
 pub fn parse(models: Vec<PydanticModel>) -> Vec<Rc<Node>> {
     let mut registry: HashMap<&String, usize> = HashMap::new();
+
     let default_node: Node = Default::default();
     let mut nodes: Vec<Rc<Node>> = vec![Rc::new(default_node); models.len()];
+    let roots: Vec<Rc<Node>>;
 
     // Populate registry.
     for (i, model) in models.iter().enumerate() {
@@ -59,14 +61,18 @@ pub fn parse(models: Vec<PydanticModel>) -> Vec<Rc<Node>> {
                 nodes[*index] = parent_node;
             }
         }
+
         nodes[i] = node;
     }
-    if nodes.is_empty() {
+
+    roots = nodes
+        .into_iter()
+        .filter(|n| n.is_root)
+        .collect::<Vec<Rc<Node>>>();
+
+    if roots.is_empty() {
         eprintln!("Failed to identify child classes of `pydantic.BaseModel`");
         process::exit(-5)
     }
-    nodes
-        .into_iter()
-        .filter(|n| n.is_root)
-        .collect::<Vec<Rc<Node>>>()
+    roots
 }
