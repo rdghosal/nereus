@@ -6,7 +6,7 @@ authors = ["Rahul D. Ghosal <rdghosal@gmail.com>"]
 edition = "2021"
 repository = "https://github.com/rdghosal/percy/"
 license-file = "LICENSE"
-keywords = ["uml", "mermaid", "pydantic", "python", "transpiler", "codegen"]
+keywords = ["uml", "mermaid", "pydantic", "python", "codegen"]
 categories = ["command-line-interface", "development-tools"]
 exclude = [
     "examples/*",
