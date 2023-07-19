@@ -1,10 +1,10 @@
 [package]
 name = "percy"
+description = "Library and executable to generate a mermaid class diagram (.mmd) from pydantic class definitions (.py files)."
 version = "0.1.0"
 authors = ["Rahul D. Ghosal <rdghosal@gmail.com>"]
 edition = "2021"
 repository = "https://github.com/rdghosal/percy/"
-license = "MIT"
 license-file = "LICENSE"
 keywords = ["uml", "mermaid", "pydantic", "python", "transpiler", "codegen"]
 categories = ["command-line-interface", "development-tools"]
