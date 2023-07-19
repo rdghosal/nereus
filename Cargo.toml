@@ -8,6 +8,11 @@ license = "MIT"
 license-file = "LICENSE.txt"
 keywords = ["uml", "mermaid", "pydantic", "python", "transpiler", "codegen"]
 categories = ["command-line-interface", "development-tools"]
+exclude = [
+    "examples/*",
+    "tests/*",
+    "test.*",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
