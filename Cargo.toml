@@ -1,5 +1,5 @@
 [package]
-name = "percy"
+name = "nereus"
 description = "Library and executable to generate a mermaid class diagram (.mmd) from pydantic class definitions (.py files)."
 version = "0.1.0"
 authors = ["Rahul D. Ghosal <rdghosal@gmail.com>"]
@@ -22,6 +22,6 @@ path = "src/lib.rs"
 
 [[bin]]
 path = "src/main.rs"
-name = "percy"
+name = "nereus"
 
 [dependencies]
