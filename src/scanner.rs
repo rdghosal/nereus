@@ -43,7 +43,7 @@ impl PydanticModel {
     }
 }
 
-pub fn lex(source: String) -> Vec<PydanticModel> {
+pub fn lex(source: String) -> Result<Vec<PydanticModel>, &'static str> {
     let mut models = vec![];
     let mut i = 0;
     let lines = source
@@ -93,32 +93,36 @@ pub fn lex(source: String) -> Vec<PydanticModel> {
 
             // Scan fields.
             // In pydantic, fields are denoted as `field_name: type`.
-            while lines[i].starts_with(consts::INDENT) && lines[i].contains(": ") {
-                // Remove leading consts::INDENT.
-                let curr_line = lines[i].trim();
-                let field_and_type: Vec<&str> = curr_line.split(": ").collect();
-                // TODO: ignore default arguments and fields
-                fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
-                i += 1;
-            }
-
-            // Consume decorators and methods.
-            while i < lines.len()
-                && (lines[i].starts_with(&format!("{}def", consts::INDENT))
-                    || lines[i].starts_with(&format!("{}@", consts::INDENT)))
-            {
-                if lines[i].starts_with(&format!("{}@", consts::INDENT)) {
-                    let is_validator = lines[i].contains("validator");
-                    i += 1;
+            while i < lines.len() && lines[i].starts_with(consts::INDENT) {
+                // Consume decorators and methods.
+                if is_decorator(lines[i]) {
+                    let is_validator = is_validator(lines[i]);
+                    while !is_method(lines[i]) {
+                        i += 1;
+                        if i > lines.len() {
+                            return Err(
+                                "Failed to scan decorator. corresponding method not found.",
+                            );
+                        }
+                    }
+                    // Skip scan of validator method.
                     if is_validator {
                         i += 1;
-                        continue;
                     }
-                }
-                if lines[i].starts_with(&format!("{}def", consts::INDENT)) {
+                } else if is_method(lines[i]) {
                     methods.push(scan_method(&lines, &mut i));
+                } else if lines[i].contains(":") {
+                    // TODO: ignore default arguments and fields
+                    let field_and_type: Vec<&str> = lines[i].split(":").map(|s| s.trim()).collect();
+                    fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
+                    i += 1;
+                } else {
+                    return Err(
+                        "Failed to complete scanning of Python source. Unexpected token found.",
+                    );
                 }
             }
+
             models.push(PydanticModel {
                 class_name: class_name.to_string(),
                 parents,
@@ -127,7 +131,7 @@ pub fn lex(source: String) -> Vec<PydanticModel> {
             })
         }
     }
-    models
+    Ok(models)
 }
 
 fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> PyMethod {
@@ -206,6 +210,18 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> PyMethod {
             PyMethodAccess::Public
         },
     }
+}
+
+fn is_decorator(line: &str) -> bool {
+    line.starts_with(&format!("{}@", consts::INDENT))
+}
+
+fn is_method(line: &str) -> bool {
+    line.starts_with(&format!("{}def", consts::INDENT))
+}
+
+fn is_validator(line: &str) -> bool {
+    line.contains("validator")
 }
 
 #[cfg(test)]

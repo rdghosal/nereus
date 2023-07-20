@@ -9,5 +9,10 @@ fn main() {
     }
     let src = utils::read_files(Path::new(&args[1]), Option::None)
         .expect("Failed to read source file(s).");
-    fs::write("test.mmd", nereus::transform(src)).expect("Failed to write output to file.");
+    match nereus::transform(src) {
+        Ok(out) => fs::write("test.mmd", out).expect("Failed to write output to file."),
+        Err(err) => {
+            eprintln!("Failed to generate mermaid. Found error {err}")
+        }
+    };
 }
