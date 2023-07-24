@@ -1,5 +1,5 @@
 use crate::scanner::PydanticModel;
-use std::{cell::RefCell, collections::HashMap, process, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Clone, Debug)]
 pub struct Node {
@@ -18,7 +18,16 @@ impl Default for Node {
     }
 }
 
-pub fn parse(models: Vec<PydanticModel>) -> Vec<Rc<Node>> {
+#[derive(Debug)]
+pub struct ParseError(String);
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl std::error::Error for ParseError {}
+
+pub fn parse(models: Vec<PydanticModel>) -> Result<Vec<Rc<Node>>, ParseError> {
     let mut registry: HashMap<&String, usize> = HashMap::new();
 
     let default_node: Node = Default::default();
@@ -42,8 +51,10 @@ pub fn parse(models: Vec<PydanticModel>) -> Vec<Rc<Node>> {
                 continue;
             }
             if !registry.contains_key(parent) && !PydanticModel::is_base_model(&parent) {
-                eprintln!("Found reference to undefined super class {}", parent);
-                process::exit(-4);
+                return Err(ParseError(format!(
+                    "Found reference to undefined super class {}",
+                    parent
+                )));
             }
             let index = registry.get(parent).unwrap();
             let parent_model = &models[*index];
@@ -71,8 +82,9 @@ pub fn parse(models: Vec<PydanticModel>) -> Vec<Rc<Node>> {
         .collect::<Vec<Rc<Node>>>();
 
     if roots.is_empty() {
-        eprintln!("Failed to identify child classes of `pydantic.BaseModel`");
-        process::exit(-5)
+        return Err(ParseError(
+            "Failed to identify child classes of `pydantic.BaseModel`".to_string(),
+        ));
     }
-    roots
+    Ok(roots)
 }

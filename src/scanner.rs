@@ -1,5 +1,4 @@
 use crate::consts;
-use std::process;
 
 const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
 
@@ -43,7 +42,16 @@ impl PydanticModel {
     }
 }
 
-pub fn lex(source: String) -> Result<Vec<PydanticModel>, &'static str> {
+#[derive(Debug)]
+pub struct ScanError(String);
+impl std::fmt::Display for ScanError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl std::error::Error for ScanError {}
+
+pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
     let mut models = vec![];
     let mut i = 0;
     let lines = source
@@ -85,8 +93,10 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, &'static str> {
                     class_name = &class_name[..start];
                 }
                 None => {
-                    eprintln!("Detected invalid syntax in class: {}", class_name);
-                    process::exit(-3);
+                    return Err(ScanError(format!(
+                        "Detected invalid syntax in class: {}",
+                        class_name
+                    )))
                 }
             };
             i += 1;
@@ -100,9 +110,10 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, &'static str> {
                     while !is_method(lines[i]) {
                         i += 1;
                         if i > lines.len() {
-                            return Err(
-                                "Failed to scan decorator. corresponding method not found.",
-                            );
+                            return Err(ScanError(
+                                "Failed to scan decorator. corresponding method not found."
+                                    .to_string(),
+                            ));
                         }
                     }
                     // Skip scan of validator method.
@@ -110,16 +121,17 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, &'static str> {
                         i += 1;
                     }
                 } else if is_method(lines[i]) {
-                    methods.push(scan_method(&lines, &mut i));
+                    methods.push(scan_method(&lines, &mut i)?);
                 } else if lines[i].contains(":") {
                     // TODO: ignore default arguments and fields
                     let field_and_type: Vec<&str> = lines[i].split(":").map(|s| s.trim()).collect();
                     fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
                     i += 1;
                 } else {
-                    return Err(
-                        "Failed to complete scanning of Python source. Unexpected token found.",
-                    );
+                    return Err(ScanError(
+                        "Failed to complete scanning of Python source. Unexpected token found."
+                            .to_string(),
+                    ));
                 }
             }
 
@@ -134,15 +146,14 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, &'static str> {
     Ok(models)
 }
 
-fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> PyMethod {
+fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMethod, ScanError> {
     // Remove consts::INDENT and trailing spaces.
     let method_signature = lines[*curr_pos].trim();
     if !method_signature.contains('(') {
-        eprintln!(
+        return Err(ScanError(format!(
             "Failed to find opening parenthesis in method signature {}",
             method_signature
-        );
-        process::exit(-7);
+        )));
     }
 
     let method_name = method_signature.split('(').collect::<Vec<&str>>()[0];
@@ -193,14 +204,13 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> PyMethod {
         *curr_pos += 1;
 
         if *curr_pos == lines.len() && !found_closing_parens {
-            eprintln!(
+            return Err(ScanError(format!(
                 "Failed to find closing parenthesis to parameters defined for method {}",
                 method_name
-            );
-            process::exit(-6);
+            )));
         }
     }
-    PyMethod {
+    Ok(PyMethod {
         name: method_name.clone(),
         args,
         returns,
@@ -209,7 +219,7 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> PyMethod {
         } else {
             PyMethodAccess::Public
         },
-    }
+    })
 }
 
 fn is_decorator(line: &str) -> bool {

@@ -12,7 +12,7 @@ fn main() {
     match nereus::transform(src) {
         Ok(out) => fs::write("test.mmd", out).expect("Failed to write output to file."),
         Err(err) => {
-            eprintln!("Failed to generate mermaid. Found error {err}")
+            eprintln!("Failed to generate mermaid. Found error: {err}")
         }
     };
 }
