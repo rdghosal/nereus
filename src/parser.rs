@@ -31,7 +31,7 @@ pub fn parse(models: Vec<PydanticModel>) -> Result<Vec<Rc<Node>>, ParseError> {
     let mut registry: HashMap<&String, usize> = HashMap::new();
 
     let default_node: Node = Default::default();
-    let mut nodes: Vec<Rc<Node>> = vec![Rc::new(default_node); models.len()];
+    let mut nodes: Vec<Option<Rc<Node>>> = vec![None; models.len()];
     let roots: Vec<Rc<Node>>;
 
     // Populate registry.
@@ -41,11 +41,24 @@ pub fn parse(models: Vec<PydanticModel>) -> Result<Vec<Rc<Node>>, ParseError> {
 
     // Create nodes, identifying `roots`, whose super class is `pydantic.BaseModel`.
     for (i, model) in models.iter().enumerate() {
-        let node = Rc::new(Node {
-            model: model.clone(),
-            children: RefCell::new(vec![]),
-            is_root: model.inherits_base_model(),
-        });
+        // let mut node = nodes[i].as_mut().unwrap_or(&mut Rc::new(Node {
+        //     model: model.clone(),
+        //     children: RefCell::new(vec![]),
+        //     is_root: model.inherits_base_model(),
+        // }));
+
+        let node: Rc<Node>;
+        match &nodes[i] {
+            Some(n) => node = n.clone(),
+            None => {
+                node = Rc::new(Node {
+                    model: model.clone(),
+                    children: RefCell::new(vec![]),
+                    is_root: model.inherits_base_model(),
+                })
+            }
+        }
+
         for parent in model.parents.iter() {
             if node.is_root {
                 continue;
@@ -60,24 +73,24 @@ pub fn parse(models: Vec<PydanticModel>) -> Result<Vec<Rc<Node>>, ParseError> {
             let parent_model = &models[*index];
 
             // Check whether the node in `nodes` is a default.
-            if nodes[*index].model.class_name == parent_model.class_name {
-                let parent_node = &mut nodes[*index];
-                parent_node.children.borrow_mut().push(Rc::clone(&node));
-            } else {
-                let parent_node = Rc::new(Node {
-                    model: parent_model.clone(),
-                    children: RefCell::new(vec![Rc::clone(&node)]),
-                    is_root: model.inherits_base_model(),
-                });
-                nodes[*index] = parent_node;
-            }
+            match &nodes[*index] {
+                Some(p) => p.children.borrow_mut().push(Rc::clone(&node)),
+                None => {
+                    let parent_node = Rc::new(Node {
+                        model: parent_model.clone(),
+                        children: RefCell::new(vec![Rc::clone(&node)]),
+                        is_root: parent_model.inherits_base_model(),
+                    });
+                    nodes[*index] = Some(parent_node);
+                }
+            };
         }
-
-        nodes[i] = node;
+        nodes[i] = Some(node);
     }
 
     roots = nodes
         .into_iter()
+        .map(|n| n.unwrap())
         .filter(|n| n.is_root)
         .collect::<Vec<Rc<Node>>>();
 

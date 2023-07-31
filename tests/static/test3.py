@@ -1,14 +1,10 @@
-"""THIRD model definition."""
+"""SECOND model definition."""
+from dataclasses import dataclass
+
 import pydantic
-from .test2 import MySecondModel
 
 
-class NotModel:
-    def __init__(self, id_):
-        self.id = id_
-
-
-class MyThirdModel(MySecondModel):
+class MySecondModel(pydantic.BaseModel):
     id: pydantic.StrictInt
     name: str
 
@@ -16,6 +12,14 @@ class MyThirdModel(MySecondModel):
     def check_id(cls, v: pydantic.StrictInt) -> pydantic.StrictInt:
         if v < 1:
             raise ValueError("`id` must be positive, non-zero value.")
+        return v
 
-    def _increase_id(self) -> None:
-        self.id += 1
+    @property
+    def key(self) -> str:
+        return f"{self.id}{self.name}"
+
+
+@dataclass
+class MyDataclass:
+    id: int
+    name: str
