@@ -1,4 +1,4 @@
-use crate::consts;
+use crate::consts::{self, INDENT};
 
 const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
 
@@ -81,7 +81,7 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
             let mut methods: Vec<PyMethod> = vec![];
 
             // Scan class names, including those of super classes.
-            let parents: Vec<String>;
+            let mut parents: Vec<String> = vec![];
             match class_name.find('(') {
                 Some(start) => {
                     let end = class_name.find(")").unwrap();
@@ -93,10 +93,7 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
                     class_name = &class_name[..start];
                 }
                 None => {
-                    return Err(ScanError(format!(
-                        "Detected invalid syntax in class: {}",
-                        class_name
-                    )))
+                    skip_orphan(&lines, &mut i);
                 }
             };
             i += 1;
@@ -232,6 +229,14 @@ fn is_method(line: &str) -> bool {
 
 fn is_validator(line: &str) -> bool {
     line.contains("validator")
+}
+
+fn skip_orphan(lines: &Vec<&str>, curr_pos: &mut usize) {
+    while curr_pos < &mut lines.len() {
+        if !lines[*curr_pos].starts_with(&format!("{}", INDENT)) {
+            break;
+        }
+    }
 }
 
 #[cfg(test)]

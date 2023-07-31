@@ -1,4 +1,6 @@
 """SECOND model definition."""
+from dataclasses import dataclass
+
 import pydantic
 
 
@@ -15,3 +17,9 @@ class MySecondModel(pydantic.BaseModel):
     @property
     def key(self) -> str:
         return f"{self.id}{self.name}"
+
+
+@dataclass
+class MyDataclass:
+    id: int
+    name: str

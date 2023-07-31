@@ -3,6 +3,11 @@ import pydantic
 from .test2 import MySecondModel
 
 
+class NotModel:
+    def __init__(self, id_):
+        self.id = id_
+
+
 class MyThirdModel(MySecondModel):
     id: pydantic.StrictInt
     name: str
