@@ -1,7 +1,7 @@
 [package]
 name = "nereus"
 description = "Library and executable to generate a mermaid class diagram (.mmd) from pydantic class definitions (.py files)."
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Rahul D. Ghosal <rdghosal@gmail.com>"]
 edition = "2021"
 repository = "https://github.com/rdghosal/nereus/"
