@@ -6,6 +6,7 @@ class MyFirstModel(pydantic.BaseModel):
     id: pydantic.StrictInt
     name: str
 
+    # A comment.
     @pydantic.validator("id")
     def check_id(cls, v: pydantic.StrictInt) -> pydantic.StrictInt:
         if v < 1:

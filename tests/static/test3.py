@@ -5,6 +5,12 @@ import pydantic
 
 
 class MySecondModel(pydantic.BaseModel):
+    """This
+    is
+    a
+    multiline
+    comment!
+    """
     id: pydantic.StrictInt
     name: str
 

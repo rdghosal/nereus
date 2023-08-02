@@ -2,6 +2,12 @@ use crate::consts::{self, INDENT};
 
 const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
 
+struct DocstringMarker;
+impl DocstringMarker {
+    const SINGLE: &str = "'''";
+    const DOUBLE: &str = "\"\"\"";
+}
+
 #[derive(Default, Debug, Clone)]
 pub enum PyMethodAccess {
     #[default]
@@ -64,16 +70,22 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
                 && !trimmed.starts_with("import")
                 && !trimmed.starts_with("from")
                 && !trimmed.starts_with("&")
-                && !trimmed.starts_with("\"\"\"")
-                && !trimmed.starts_with("'''")
                 && !trimmed.starts_with("#")
+                && !(trimmed.starts_with(DocstringMarker::SINGLE)
+                    && trimmed.ends_with(DocstringMarker::SINGLE)
+                    && trimmed.len() >= 6)
+                && !(trimmed.starts_with(DocstringMarker::DOUBLE)
+                    && trimmed.ends_with(DocstringMarker::DOUBLE)
+                    && trimmed.len() >= 6)
         })
         .collect::<Vec<_>>();
 
     // NOTE: Whitespace is significant in Python
     while i < lines.len() {
         let line = lines[i];
-        if !line.starts_with("class") {
+        if is_multiline_docstring(&lines, &i) {
+            skip_multiline_docstring(&lines, &mut i);
+        } else if !line.starts_with("class") {
             i += 1;
         } else {
             let mut class_name = line.split(' ').collect::<Vec<&str>>()[1];
@@ -124,10 +136,11 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
                     let field_and_type: Vec<&str> = lines[i].split(":").map(|s| s.trim()).collect();
                     fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
                     i += 1;
+                } else if is_multiline_docstring(&lines, &i) {
+                    skip_multiline_docstring(&lines, &mut i);
                 } else {
                     return Err(ScanError(
-                        "Failed to complete scanning of Python source. Unexpected token found."
-                            .to_string(),
+                        format!("Failed to complete scanning of Python source. Unexpected token found in line '{}'.", &lines[i])
                     ));
                 }
             }
@@ -231,12 +244,27 @@ fn is_validator(line: &str) -> bool {
     line.contains("validator")
 }
 
+fn is_multiline_docstring(lines: &Vec<&str>, curr_pos: &usize) -> bool {
+    let line = &lines[*curr_pos].trim();
+    line.starts_with(DocstringMarker::SINGLE) || line.starts_with(DocstringMarker::DOUBLE)
+}
+
 fn skip_orphan(lines: &Vec<&str>, curr_pos: &mut usize) {
     while curr_pos < &mut lines.len() {
         if !lines[*curr_pos].starts_with(&format!("{}", INDENT)) {
             break;
         }
     }
+}
+
+fn skip_multiline_docstring(lines: &Vec<&str>, curr_pos: &mut usize) {
+    *curr_pos += 1;
+    while !(lines[*curr_pos].contains(DocstringMarker::SINGLE)
+        || lines[*curr_pos].contains(DocstringMarker::DOUBLE))
+    {
+        *curr_pos += 1;
+    }
+    *curr_pos += 1;
 }
 
 #[cfg(test)]
