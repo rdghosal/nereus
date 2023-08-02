@@ -6,6 +6,13 @@ class MyFirstModel(pydantic.BaseModel):
     id: pydantic.StrictInt
     name: str
 
+    def __str__(self) -> str:
+        return (
+            "MyFirstModel("
+                + ", ".join([f"{k}={v!r}" for k, v in self.__dict__.items()])
+                + ")"
+            )
+
     # A comment.
     @pydantic.validator("id")
     def check_id(cls, v: pydantic.StrictInt) -> pydantic.StrictInt:

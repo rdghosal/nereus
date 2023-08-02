@@ -8,16 +8,6 @@ pub struct Node {
     pub is_root: bool,
 }
 
-impl Default for Node {
-    fn default() -> Self {
-        Node {
-            model: Default::default(),
-            children: RefCell::new(vec![]),
-            is_root: false,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct ParseError(String);
 impl std::fmt::Display for ParseError {
@@ -40,12 +30,6 @@ pub fn parse(models: Vec<PydanticModel>) -> Result<Vec<Rc<Node>>, ParseError> {
 
     // Create nodes, identifying `roots`, whose super class is `pydantic.BaseModel`.
     for (i, model) in models.iter().enumerate() {
-        // let mut node = nodes[i].as_mut().unwrap_or(&mut Rc::new(Node {
-        //     model: model.clone(),
-        //     children: RefCell::new(vec![]),
-        //     is_root: model.inherits_base_model(),
-        // }));
-
         let node: Rc<Node>;
         match &nodes[i] {
             Some(n) => node = n.clone(),

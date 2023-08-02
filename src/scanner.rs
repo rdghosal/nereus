@@ -23,6 +23,12 @@ pub struct PyMethod {
     pub access: PyMethodAccess,
 }
 
+impl PyMethod {
+    pub fn is_dunder(&self) -> bool {
+        self.name.starts_with("__") && self.name.ends_with("__")
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct PydanticModel {
     pub class_name: String,

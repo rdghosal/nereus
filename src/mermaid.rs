@@ -33,6 +33,9 @@ impl ClassDiagram {
         }
         for method in &node.model.methods {
             let access_modifier: &str;
+            if method.is_dunder() {
+                continue;
+            }
             match method.access {
                 PyMethodAccess::Public => access_modifier = "+",
                 PyMethodAccess::Private => access_modifier = "-",
