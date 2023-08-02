@@ -30,7 +30,6 @@ impl std::error::Error for ParseError {}
 pub fn parse(models: Vec<PydanticModel>) -> Result<Vec<Rc<Node>>, ParseError> {
     let mut registry: HashMap<&String, usize> = HashMap::new();
 
-    let default_node: Node = Default::default();
     let mut nodes: Vec<Option<Rc<Node>>> = vec![None; models.len()];
     let roots: Vec<Rc<Node>>;
 
