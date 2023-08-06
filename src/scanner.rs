@@ -154,8 +154,8 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
                 } else if is_method(lines[i]) {
                     methods.push(scan_method(&lines, &mut i)?);
                 } else if lines[i].contains(":") {
-                    // TODO: ignore default arguments and fields
-                    let field_and_type: Vec<&str> = lines[i].split(":").map(|s| s.trim()).collect();
+                    let field_and_type: Vec<&str> =
+                        lines[i].split([':', '=']).map(|s| s.trim()).collect();
                     fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
                     i += 1;
                 } else if DocstringMarker::is_docstring(lines[i]) {

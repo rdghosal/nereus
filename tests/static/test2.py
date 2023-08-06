@@ -9,8 +9,8 @@ class NotModel:
 
 
 class MyThirdModel(MySecondModel):
-    id: pydantic.StrictInt
-    name: str
+    id: pydantic.StrictInt = pydantic.Field(default=1)
+    name: str = "hello"
 
     @pydantic.validator("id")
     def check_id(cls, v: pydantic.StrictInt) -> pydantic.StrictInt:
