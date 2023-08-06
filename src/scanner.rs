@@ -6,6 +6,22 @@ struct DocstringMarker;
 impl DocstringMarker {
     const SINGLE: &str = "'''";
     const DOUBLE: &str = "\"\"\"";
+
+    fn is_docstring(line: &str) -> bool {
+        let trimmed = line.trim();
+        trimmed.starts_with(DocstringMarker::SINGLE) || trimmed.starts_with(DocstringMarker::DOUBLE)
+    }
+}
+
+struct Placeholder;
+impl Placeholder {
+    const PASS: &str = "pass";
+    const ELLIPSIS: &str = "...";
+
+    fn is_placeholder(line: &str) -> bool {
+        let trimmed = line.trim();
+        trimmed.starts_with(Placeholder::PASS) || trimmed.starts_with(Placeholder::ELLIPSIS)
+    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -89,7 +105,7 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
     // NOTE: Whitespace is significant in Python
     while i < lines.len() {
         let line = lines[i];
-        if is_multiline_docstring(&lines, &i) {
+        if DocstringMarker::is_docstring(lines[i]) {
             skip_multiline_docstring(&lines, &mut i);
         } else if !line.starts_with("class") {
             i += 1;
@@ -142,8 +158,10 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
                     let field_and_type: Vec<&str> = lines[i].split(":").map(|s| s.trim()).collect();
                     fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
                     i += 1;
-                } else if is_multiline_docstring(&lines, &i) {
+                } else if DocstringMarker::is_docstring(lines[i]) {
                     skip_multiline_docstring(&lines, &mut i);
+                } else if Placeholder::is_placeholder(lines[i]) {
+                    i += 1;
                 } else {
                     return Err(ScanError(
                         format!("Failed to complete scanning of Python source. Unexpected token found in line '{}'.", &lines[i])
@@ -248,11 +266,6 @@ fn is_method(line: &str) -> bool {
 
 fn is_validator(line: &str) -> bool {
     line.contains("validator")
-}
-
-fn is_multiline_docstring(lines: &Vec<&str>, curr_pos: &usize) -> bool {
-    let line = &lines[*curr_pos].trim();
-    line.starts_with(DocstringMarker::SINGLE) || line.starts_with(DocstringMarker::DOUBLE)
 }
 
 fn skip_orphan(lines: &Vec<&str>, curr_pos: &mut usize) {
