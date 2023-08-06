@@ -1,11 +1,11 @@
 use crate::{
     consts,
-    scanner::{PyMethodAccess, PydanticModel},
+    scanner::{PyClass, PyMethodAccess},
 };
 
 pub struct ClassDiagram;
 impl ClassDiagram {
-    pub fn make(models: Vec<PydanticModel>, lines: &mut Vec<String>) {
+    pub fn make(models: Vec<PyClass>, lines: &mut Vec<String>) {
         let inherits = " <|-- ";
         for model in models.iter() {
             if lines.is_empty() {

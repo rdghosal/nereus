@@ -1,20 +1,31 @@
 classDiagram
-    class `pydantic.BaseModel`
-    `pydantic.BaseModel` <|-- MyFirstModel
     class MyFirstModel{
         +id pydantic.StrictInt
         +name str
         +get_random_list(self) list[int | float]
     }
-    `pydantic.BaseModel` <|-- MySecondModel
-    class MySecondModel{
-        +id pydantic.StrictInt
-        +name str
-        +key(self) str
+    `pydantic.BaseModel` <|-- MyFirstModel
+    class NotModel{
     }
-    MySecondModel <|-- MyThirdModel
     class MyThirdModel{
         +id pydantic.StrictInt
         +name str
         -_increase_id(self) None
     }
+    `MySecondModel` <|-- MyThirdModel
+    class MySecondModel{
+        +id pydantic.StrictInt
+        +name str
+        +key(self) str
+    }
+    `pydantic.BaseModel` <|-- MySecondModel
+    class MyDataclass{
+        +id int
+        +name str
+    }
+    class EllipsisTest{
+    }
+    `MySecondModel` <|-- EllipsisTest
+    class PassTest{
+    }
+    `MySecondModel` <|-- PassTest

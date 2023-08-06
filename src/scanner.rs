@@ -1,12 +1,10 @@
 use crate::consts;
 use std::collections::HashSet;
 
-const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
-
 trait UniqueVec {
     fn remove_dups(&mut self);
 }
-impl UniqueVec for Vec<PydanticModel> {
+impl UniqueVec for Vec<PyClass> {
     fn remove_dups(&mut self) {
         let mut found = HashSet::new();
         self.retain(|cls| found.insert(cls.class_name.clone()));
@@ -57,32 +55,11 @@ impl PyMethod {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct PydanticModel {
+pub struct PyClass {
     pub class_name: String,
     pub parents: Vec<String>,
     pub fields: Vec<(String, String)>,
     pub methods: Vec<PyMethod>,
-}
-
-impl PydanticModel {
-    pub fn is_base_model(class_name: &String) -> bool {
-        PYDANTIC_BASE_MODEL_REFS.contains(&class_name.as_str())
-    }
-
-    pub fn inherits_base_model(&self) -> bool {
-        let mut inherits = false;
-        for parent in self.parents.iter() {
-            if PydanticModel::is_base_model(&parent) {
-                inherits = true;
-                break;
-            }
-        }
-        inherits
-    }
-
-    pub fn is_orphan(&self) -> bool {
-        self.parents.len() == 0
-    }
 }
 
 #[derive(Debug)]
@@ -94,7 +71,7 @@ impl std::fmt::Display for ScanError {
 }
 impl std::error::Error for ScanError {}
 
-pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
+pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
     let mut models = vec![];
     let mut i = 0;
     let lines = source
@@ -192,7 +169,7 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
                 }
             }
 
-            models.push(PydanticModel {
+            models.push(PyClass {
                 class_name: class_name.to_string(),
                 parents,
                 fields,
