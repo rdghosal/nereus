@@ -1,6 +1,17 @@
-use crate::consts::{self, INDENT};
+use crate::consts;
+use std::collections::HashSet;
 
 const PYDANTIC_BASE_MODEL_REFS: [&str; 2] = ["pydantic.BaseModel", "BaseModel"];
+
+trait UniqueVec {
+    fn remove_dups(&mut self);
+}
+impl UniqueVec for Vec<PydanticModel> {
+    fn remove_dups(&mut self) {
+        let mut found = HashSet::new();
+        self.retain(|cls| found.insert(cls.class_name.clone()));
+    }
+}
 
 struct DocstringMarker;
 impl DocstringMarker {
@@ -189,6 +200,7 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
             })
         }
     }
+    models.remove_dups();
     Ok(models)
 }
 
@@ -278,14 +290,6 @@ fn is_method(line: &str) -> bool {
 
 fn is_validator(line: &str) -> bool {
     line.contains("validator")
-}
-
-fn skip_orphan(lines: &Vec<&str>, curr_pos: &mut usize) {
-    while curr_pos < &mut lines.len() {
-        if !lines[*curr_pos].starts_with(&format!("{}", INDENT)) {
-            break;
-        }
-    }
 }
 
 fn skip_multiline_docstring(lines: &Vec<&str>, curr_pos: &mut usize) {

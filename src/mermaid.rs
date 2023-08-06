@@ -1,19 +1,21 @@
-use crate::{consts, parser::Node, scanner::PyMethodAccess};
-use std::rc::Rc;
+use crate::{
+    consts,
+    scanner::{PyMethodAccess, PydanticModel},
+};
 
 pub struct ClassDiagram;
 impl ClassDiagram {
-    pub fn make(nodes: Vec<Rc<Node>>, lines: &mut Vec<String>) {
+    pub fn make(models: Vec<PydanticModel>, lines: &mut Vec<String>) {
         let inherits = " <|-- ";
-        for node in nodes.iter() {
+        for model in models.iter() {
             if lines.is_empty() {
                 lines.push("classDiagram".to_string());
             }
 
             // Define class as well as the fields and methods therein.
-            let class_name = format!("{}class {}{{", consts::INDENT, node.model.class_name);
+            let class_name = format!("{}class {}{{", consts::INDENT, model.class_name);
             lines.push(class_name);
-            for field in &node.model.fields {
+            for field in &model.fields {
                 lines.push(format!(
                     "{}{}+{} {}",
                     consts::INDENT,
@@ -23,7 +25,7 @@ impl ClassDiagram {
                 ));
             }
 
-            for method in &node.model.methods {
+            for method in &model.methods {
                 let access_modifier: &str;
                 if method.is_dunder() {
                     continue;
@@ -61,13 +63,13 @@ impl ClassDiagram {
             }
             lines.push(format!("{}}}", consts::INDENT));
 
-            for parent in node.model.parents.iter() {
+            for parent in model.parents.iter() {
                 lines.push(format!(
                     "{}`{}`{}{}",
                     consts::INDENT,
                     parent,
                     inherits,
-                    node.model.class_name
+                    model.class_name
                 ));
             }
         }
