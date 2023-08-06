@@ -1,5 +1,9 @@
 use crate::scanner::PydanticModel;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 #[derive(Clone, Debug)]
 pub struct Node {
@@ -17,8 +21,19 @@ impl std::fmt::Display for ParseError {
 }
 impl std::error::Error for ParseError {}
 
-pub fn parse(models: Vec<PydanticModel>) -> Result<Vec<Rc<Node>>, ParseError> {
+trait UniqueVec {
+    fn remove_dups(&mut self);
+}
+impl UniqueVec for Vec<PydanticModel> {
+    fn remove_dups(&mut self) {
+        let mut found = HashSet::new();
+        self.retain(|cls| found.insert(cls.class_name.clone()));
+    }
+}
+
+pub fn parse(models: &mut Vec<PydanticModel>) -> Result<Vec<Rc<Node>>, ParseError> {
     let mut registry: HashMap<&String, usize> = HashMap::new();
+    models.remove_dups();
 
     let mut nodes: Vec<Option<Rc<Node>>> = vec![None; models.len()];
     let roots: Vec<Rc<Node>>;
@@ -37,7 +52,7 @@ pub fn parse(models: Vec<PydanticModel>) -> Result<Vec<Rc<Node>>, ParseError> {
                 node = Rc::new(Node {
                     model: model.clone(),
                     children: RefCell::new(vec![]),
-                    is_root: model.inherits_base_model(),
+                    is_root: model.is_orphan(),
                 })
             }
         }
@@ -46,27 +61,21 @@ pub fn parse(models: Vec<PydanticModel>) -> Result<Vec<Rc<Node>>, ParseError> {
             if node.is_root {
                 continue;
             }
-            if !registry.contains_key(parent) && !PydanticModel::is_base_model(&parent) {
-                return Err(ParseError(format!(
-                    "Found reference to undefined super class {}",
-                    parent
-                )));
-            }
-            let index = registry.get(parent).unwrap();
-            let parent_model = &models[*index];
 
-            // Check whether the node in `nodes` is a default.
-            match &nodes[*index] {
-                Some(p) => p.children.borrow_mut().push(Rc::clone(&node)),
-                None => {
-                    let parent_node = Rc::new(Node {
-                        model: parent_model.clone(),
-                        children: RefCell::new(vec![Rc::clone(&node)]),
-                        is_root: parent_model.inherits_base_model(),
-                    });
-                    nodes[*index] = Some(parent_node);
-                }
-            };
+            if let Some(index) = registry.get(parent) {
+                let parent_model = &models[*index];
+                match &nodes[*index] {
+                    Some(p) => p.children.borrow_mut().push(Rc::clone(&node)),
+                    None => {
+                        let parent_node = Rc::new(Node {
+                            model: parent_model.clone(),
+                            children: RefCell::new(vec![Rc::clone(&node)]),
+                            is_root: parent_model.is_orphan(),
+                        });
+                        nodes[*index] = Some(parent_node);
+                    }
+                };
+            }
         }
         nodes[i] = Some(node);
     }
@@ -74,7 +83,6 @@ pub fn parse(models: Vec<PydanticModel>) -> Result<Vec<Rc<Node>>, ParseError> {
     roots = nodes
         .into_iter()
         .map(|n| n.unwrap())
-        .filter(|n| n.is_root)
         .collect::<Vec<Rc<Node>>>();
 
     if roots.is_empty() {

@@ -68,6 +68,10 @@ impl PydanticModel {
         }
         inherits
     }
+
+    pub fn is_orphan(&self) -> bool {
+        self.parents.len() == 0
+    }
 }
 
 #[derive(Debug)]
@@ -127,9 +131,17 @@ pub fn lex(source: String) -> Result<Vec<PydanticModel>, ScanError> {
                     class_name = &class_name[..start];
                 }
                 None => {
-                    skip_orphan(&lines, &mut i);
+                    if let Some(term) = class_name.find(':') {
+                        class_name = &class_name[..term];
+                    } else {
+                        return Err(ScanError(format!(
+                            "Failed to identify class name terminator (:) in class {}",
+                            class_name
+                        )));
+                    }
                 }
-            };
+            }
+
             i += 1;
 
             // Scan fields.
