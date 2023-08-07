@@ -1,6 +1,34 @@
 use crate::consts;
 use std::collections::HashSet;
 
+struct Lexeme {
+    line_number: usize,
+    value: &'static str,
+}
+
+impl Lexeme {
+    fn indent_count(&self) -> usize {
+        self.value
+            .split(consts::INDENT)
+            .filter(|&c| c == consts::INDENT)
+            .count()
+    }
+}
+
+enum Signature {
+    Class(Lexeme),
+    Method(Lexeme),
+}
+
+enum Token {
+    // As struct?
+    Comment(Lexeme),
+    Import(Lexeme),
+    Expression(Lexeme),
+    Constant(Lexeme),
+    Signature,
+}
+
 trait UniqueVec {
     fn remove_dups(&mut self);
 }
