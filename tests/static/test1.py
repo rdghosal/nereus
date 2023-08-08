@@ -2,7 +2,7 @@
 import pydantic
 
 
-class MyFirstModel(pydantic.BaseModel):
+class MyFirstModel(pydantic.BaseModel, SomeOtherClass):
     id: pydantic.StrictInt
     name: str
 

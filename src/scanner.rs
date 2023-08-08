@@ -108,19 +108,19 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
 
             // Scan class names, including those of super classes.
             let mut parents: Vec<String> = vec![];
-            match class_name.find('(') {
+            match line.find('(') {
                 Some(start) => {
-                    let end = class_name.find(")").unwrap();
-                    let parent_args = &class_name[start + 1..end];
+                    let end = line.find(")").unwrap();
+                    let parent_args = &line[start + 1..end];
                     parents = parent_args
                         .split(",")
                         .map(|p| p.trim().to_string())
                         .collect::<Vec<String>>();
-                    class_name = &class_name[..start];
+                    class_name = &line[..start].split(' ').nth(1).unwrap();
                 }
                 None => {
-                    if let Some(term) = class_name.find(':') {
-                        class_name = &class_name[..term];
+                    if let Some(term) = line.find(':') {
+                        class_name = &line[..term].split(' ').nth(1).unwrap();
                     } else {
                         return Err(ScanError(format!(
                             "Failed to identify class name terminator (:) in class {}",
