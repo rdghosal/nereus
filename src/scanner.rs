@@ -178,6 +178,7 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
                     i += 1;
                 } else {
                     println!("Skipping unscannable line {}", lines[i]);
+                    i += 1;
                     // return Err(ScanError(
                     //     format!("Failed to complete scanning of Python source. Unexpected token found in line '{}'.", &lines[i])
                     // ));
