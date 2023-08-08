@@ -5,7 +5,7 @@ use crate::{
 
 pub struct ClassDiagram;
 impl ClassDiagram {
-    pub fn make(models: Vec<PyClass>, lines: &mut Vec<String>) {
+    pub fn make(models: Vec<PyClass>, lines: &mut Vec<String>) -> Result<(), &str> {
         let inherits = " <|-- ";
         for model in models.iter() {
             if lines.is_empty() {
@@ -15,14 +15,27 @@ impl ClassDiagram {
             // Define class as well as the fields and methods therein.
             let class_name = format!("{}class {}{{", consts::INDENT, model.class_name);
             lines.push(class_name);
-            for field in &model.fields {
-                lines.push(format!(
-                    "{}{}+{} {}",
-                    consts::INDENT,
-                    consts::INDENT,
-                    field.0,
-                    field.1
-                ));
+            for (name, type_, default) in model.fields.iter() {
+                let line = if type_.is_some() {
+                    format!(
+                        "{}{}+{} {}",
+                        consts::INDENT,
+                        consts::INDENT,
+                        name,
+                        type_.clone().unwrap()
+                    )
+                } else if default.is_some() {
+                    format!(
+                        "{}{}+{} = {}",
+                        consts::INDENT,
+                        consts::INDENT,
+                        name,
+                        default.clone().unwrap()
+                    )
+                } else {
+                    format!("{}{}+{}", consts::INDENT, consts::INDENT, name)
+                };
+                lines.push(line);
             }
 
             for method in &model.methods {
@@ -73,5 +86,6 @@ impl ClassDiagram {
                 ));
             }
         }
+        Ok(())
     }
 }

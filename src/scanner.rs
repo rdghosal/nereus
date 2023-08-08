@@ -58,7 +58,7 @@ impl PyMethod {
 pub struct PyClass {
     pub class_name: String,
     pub parents: Vec<String>,
-    pub fields: Vec<(String, String)>,
+    pub fields: Vec<(String, Option<String>, Option<String>)>,
     pub methods: Vec<PyMethod>,
 }
 
@@ -103,7 +103,7 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
             i += 1;
         } else {
             let mut class_name = line.split(' ').collect::<Vec<&str>>()[1];
-            let mut fields: Vec<(String, String)> = vec![];
+            let mut fields: Vec<(String, Option<String>, Option<String>)> = vec![];
             let mut methods: Vec<PyMethod> = vec![];
 
             // Scan class names, including those of super classes.
@@ -137,7 +137,6 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
             while i < lines.len() && lines[i].starts_with(consts::INDENT) {
                 // Consume decorators and methods.
                 if is_decorator(lines[i]) {
-                    let is_validator = is_validator(lines[i]);
                     while !is_method(lines[i]) {
                         i += 1;
                         if i > lines.len() {
@@ -147,25 +146,41 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
                             ));
                         }
                     }
-                    // Skip scan of validator method.
-                    if is_validator {
-                        i += 1;
-                    }
+                    // // Skip scan of validator method.
+                    // if is_validator {
+                    //     i += 1;
+                    // }
                 } else if is_method(lines[i]) {
                     methods.push(scan_method(&lines, &mut i)?);
                 } else if lines[i].contains(":") {
                     let field_and_type: Vec<&str> =
                         lines[i].split([':', '=']).map(|s| s.trim()).collect();
-                    fields.push((field_and_type[0].to_string(), field_and_type[1].to_string()));
+                    fields.push((
+                        field_and_type[0].to_string(),
+                        Some(field_and_type[1].to_string()),
+                        None,
+                    ));
+                    i += 1;
+                } else if lines[i].contains("=") {
+                    let field_and_type: Vec<&str> = lines[i].split('=').map(|s| s.trim()).collect();
+                    fields.push((
+                        field_and_type[0].to_string(),
+                        None,
+                        Some(field_and_type[1].to_string()),
+                    ));
                     i += 1;
                 } else if DocstringMarker::is_docstring(lines[i]) {
                     skip_multiline_docstring(&lines, &mut i);
                 } else if Placeholder::is_placeholder(lines[i]) {
                     i += 1;
+                } else if lines[i].trim().chars().all(char::is_alphanumeric) {
+                    fields.push((lines[i].trim().to_string(), None, None));
+                    i += 1;
                 } else {
-                    return Err(ScanError(
-                        format!("Failed to complete scanning of Python source. Unexpected token found in line '{}'.", &lines[i])
-                    ));
+                    println!("Skipping unscannable line {}", lines[i]);
+                    // return Err(ScanError(
+                    //     format!("Failed to complete scanning of Python source. Unexpected token found in line '{}'.", &lines[i])
+                    // ));
                 }
             }
 
@@ -265,9 +280,9 @@ fn is_method(line: &str) -> bool {
     line.starts_with(&format!("{}def", consts::INDENT))
 }
 
-fn is_validator(line: &str) -> bool {
-    line.contains("validator")
-}
+// fn is_validator(line: &str) -> bool {
+//     line.contains("validator")
+// }
 
 fn skip_multiline_docstring(lines: &Vec<&str>, curr_pos: &mut usize) {
     *curr_pos += 1;

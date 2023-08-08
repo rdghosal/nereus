@@ -1,4 +1,5 @@
 """THIRD model definition."""
+import enum
 import pydantic
 from .test2 import MySecondModel
 
@@ -19,3 +20,8 @@ class MyThirdModel(MySecondModel):
 
     def _increase_id(self) -> None:
         self.id += 1
+
+class TestEnum(enum.Enum):
+    RED
+    BLUE
+    GREEN
