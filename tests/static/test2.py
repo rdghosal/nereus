@@ -10,6 +10,7 @@ class NotModel:
 
 
 class MyThirdModel(MySecondModel):
+    default_value: str
     id: pydantic.StrictInt = pydantic.Field(default=1)
     name: str = "hello"
 

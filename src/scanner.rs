@@ -11,26 +11,81 @@ impl UniqueVec for Vec<PyClass> {
     }
 }
 
+trait PyLine {
+    fn is_docstring(&self) -> bool;
+    fn is_full_docstring(&self) -> bool;
+    fn is_placeholder(&self) -> bool;
+    fn is_decorator(&self) -> bool;
+    fn is_method(&self) -> bool;
+    fn is_class(&self) -> bool;
+    fn is_import(&self) -> bool;
+    fn is_comment(&self) -> bool;
+    fn indent_count(&self) -> usize;
+    fn starts_with_token(&self, token: &str) -> bool;
+}
+
+impl PyLine for &str {
+    fn is_docstring(&self) -> bool {
+        let trimmed = self.trim();
+        trimmed.starts_with(DocstringMarker::SINGLE) || trimmed.starts_with(DocstringMarker::DOUBLE)
+    }
+
+    fn is_placeholder(&self) -> bool {
+        let trimmed = self.trim();
+        trimmed.starts_with(Placeholder::PASS) || trimmed.starts_with(Placeholder::ELLIPSIS)
+    }
+
+    fn is_decorator(&self) -> bool {
+        self.trim().starts_with("@")
+    }
+
+    fn starts_with_token(&self, token: &str) -> bool {
+        let parsed = self.trim().split(' ').nth(0);
+        parsed.is_some() && (parsed.unwrap() == token)
+    }
+
+    fn is_method(&self) -> bool {
+        self.starts_with_token("def")
+    }
+
+    fn is_class(&self) -> bool {
+        self.starts_with_token("class")
+    }
+
+    fn is_import(&self) -> bool {
+        let trimmed = self.trim();
+        trimmed.starts_with("import") || trimmed.starts_with("from")
+    }
+
+    fn is_full_docstring(&self) -> bool {
+        let trimmed = self.trim();
+        (trimmed.starts_with(DocstringMarker::SINGLE)
+            && trimmed.ends_with(DocstringMarker::SINGLE)
+            && trimmed.len() >= 6)
+            || (trimmed.starts_with(DocstringMarker::DOUBLE)
+                && trimmed.ends_with(DocstringMarker::DOUBLE)
+                && trimmed.len() >= 6)
+    }
+
+    fn is_comment(&self) -> bool {
+        self.trim().starts_with("#")
+    }
+
+    fn indent_count(&self) -> usize {
+        self.split(consts::INDENT).filter(|s| s.is_empty()).count()
+    }
+}
+
 struct DocstringMarker;
 impl DocstringMarker {
     const SINGLE: &str = "'''";
     const DOUBLE: &str = "\"\"\"";
-
-    fn is_docstring(line: &str) -> bool {
-        let trimmed = line.trim();
-        trimmed.starts_with(DocstringMarker::SINGLE) || trimmed.starts_with(DocstringMarker::DOUBLE)
-    }
 }
 
 struct Placeholder;
 impl Placeholder {
     const PASS: &str = "pass";
     const ELLIPSIS: &str = "...";
-
-    fn is_placeholder(line: &str) -> bool {
-        let trimmed = line.trim();
-        trimmed.starts_with(Placeholder::PASS) || trimmed.starts_with(Placeholder::ELLIPSIS)
-    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -77,29 +132,23 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
     let lines = source
         .split("\n")
         .filter(|s| {
-            let is_scoped = s.starts_with(&format!("{}{}", consts::INDENT, consts::INDENT));
+            let is_scoped = s.indent_count() == 2;
             let trimmed = s.trim();
             !is_scoped
                 && !trimmed.is_empty()
-                && !trimmed.starts_with("import")
-                && !trimmed.starts_with("from")
+                && !trimmed.is_import()
                 && !trimmed.starts_with("&")
-                && !trimmed.starts_with("#")
-                && !(trimmed.starts_with(DocstringMarker::SINGLE)
-                    && trimmed.ends_with(DocstringMarker::SINGLE)
-                    && trimmed.len() >= 6)
-                && !(trimmed.starts_with(DocstringMarker::DOUBLE)
-                    && trimmed.ends_with(DocstringMarker::DOUBLE)
-                    && trimmed.len() >= 6)
+                && !trimmed.is_comment()
+                && !trimmed.is_full_docstring()
         })
         .collect::<Vec<_>>();
 
     // NOTE: Whitespace is significant in Python
     while i < lines.len() {
         let line = lines[i];
-        if DocstringMarker::is_docstring(lines[i]) {
+        if line.is_docstring() {
             skip_multiline_docstring(&lines, &mut i);
-        } else if !line.starts_with("class") {
+        } else if !line.is_class() {
             i += 1;
         } else {
             let mut class_name = line.split(' ').collect::<Vec<&str>>()[1];
@@ -134,10 +183,10 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
 
             // Scan fields.
             // In pydantic, fields are denoted as `field_name: type`.
-            while i < lines.len() && lines[i].starts_with(consts::INDENT) {
+            while i < lines.len() && lines[i].indent_count() == 1 {
                 // Consume decorators and methods.
-                if is_decorator(lines[i]) {
-                    while !is_method(lines[i]) {
+                if lines[i].is_decorator() {
+                    while !lines[i].is_method() {
                         i += 1;
                         if i > lines.len() {
                             return Err(ScanError(
@@ -150,7 +199,7 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
                     // if is_validator {
                     //     i += 1;
                     // }
-                } else if is_method(lines[i]) {
+                } else if lines[i].is_method() {
                     methods.push(scan_method(&lines, &mut i)?);
                 } else if lines[i].contains(":") {
                     let field_and_type: Vec<&str> =
@@ -169,9 +218,9 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
                         Some(field_and_type[1].to_string()),
                     ));
                     i += 1;
-                } else if DocstringMarker::is_docstring(lines[i]) {
+                } else if lines[i].is_docstring() {
                     skip_multiline_docstring(&lines, &mut i);
-                } else if Placeholder::is_placeholder(lines[i]) {
+                } else if lines[i].is_placeholder() {
                     i += 1;
                 } else if lines[i].trim().chars().all(char::is_alphanumeric) {
                     fields.push((lines[i].trim().to_string(), None, None));
@@ -272,18 +321,6 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMethod, Scan
         },
     })
 }
-
-fn is_decorator(line: &str) -> bool {
-    line.starts_with(&format!("{}@", consts::INDENT))
-}
-
-fn is_method(line: &str) -> bool {
-    line.starts_with(&format!("{}def", consts::INDENT))
-}
-
-// fn is_validator(line: &str) -> bool {
-//     line.contains("validator")
-// }
 
 fn skip_multiline_docstring(lines: &Vec<&str>, curr_pos: &mut usize) {
     *curr_pos += 1;
