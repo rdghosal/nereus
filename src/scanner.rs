@@ -131,16 +131,7 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
     let mut i = 0;
     let lines = source
         .split("\n")
-        .filter(|s| {
-            let is_scoped = s.indent_count() == 2;
-            let trimmed = s.trim();
-            !is_scoped
-                && !trimmed.is_empty()
-                && !trimmed.is_import()
-                && !trimmed.starts_with("&")
-                && !trimmed.is_comment()
-                && !trimmed.is_full_docstring()
-        })
+        .filter(|s| !s.is_empty() && !s.is_import() && !s.is_comment() && !s.is_full_docstring())
         .collect::<Vec<_>>();
 
     // NOTE: Whitespace is significant in Python
@@ -148,10 +139,10 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
         let line = lines[i];
         if line.is_docstring() {
             skip_multiline_docstring(&lines, &mut i);
-        } else if !line.is_class() {
+        } else if !(line.is_class() && line.indent_count() == 0) {
             i += 1;
         } else {
-            let mut class_name = line.split(' ').collect::<Vec<&str>>()[1];
+            let mut class_name = line.split(' ').nth(1).unwrap();
             let mut fields: Vec<(String, Option<String>, Option<String>)> = vec![];
             let mut methods: Vec<PyMethod> = vec![];
 
@@ -195,13 +186,9 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
                             ));
                         }
                     }
-                    // // Skip scan of validator method.
-                    // if is_validator {
-                    //     i += 1;
-                    // }
                 } else if lines[i].is_method() {
                     methods.push(scan_method(&lines, &mut i)?);
-                } else if lines[i].contains(":") {
+                } else if lines[i].contains(":") && !lines[i].is_class() {
                     let field_and_type: Vec<&str> =
                         lines[i].split([':', '=']).map(|s| s.trim()).collect();
                     fields.push((
@@ -228,9 +215,6 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
                 } else {
                     println!("Skipping unscannable line {}", lines[i]);
                     i += 1;
-                    // return Err(ScanError(
-                    //     format!("Failed to complete scanning of Python source. Unexpected token found in line '{}'.", &lines[i])
-                    // ));
                 }
             }
 

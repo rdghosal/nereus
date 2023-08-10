@@ -22,3 +22,6 @@ class MyFirstModel(pydantic.BaseModel, SomeOtherClass):
 
     def get_random_list(self) -> list[int | float]:
         return [1, 1.0, 2]
+
+    class Test(pydantic.BaseConfig):
+        pass
