@@ -22,6 +22,7 @@ trait PyLine {
     fn is_comment(&self) -> bool;
     fn indent_count(&self) -> usize;
     fn starts_with_token(&self, token: &str) -> bool;
+    fn is_enum_variant(&self) -> bool;
 }
 
 impl PyLine for &str {
@@ -69,6 +70,10 @@ impl PyLine for &str {
 
     fn is_comment(&self) -> bool {
         self.trim().starts_with("#")
+    }
+
+    fn is_enum_variant(&self) -> bool {
+        self.trim().chars().all(char::is_alphanumeric)
     }
 
     fn indent_count(&self) -> usize {
@@ -131,7 +136,13 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
     let mut i = 0;
     let lines = source
         .split("\n")
-        .filter(|s| !s.is_empty() && !s.is_import() && !s.is_comment() && !s.is_full_docstring())
+        .filter(|s| {
+            !s.is_empty()
+                && !s.is_import()
+                && !s.is_comment()
+                && !s.is_full_docstring()
+                && !s.is_decorator()
+        })
         .collect::<Vec<_>>();
 
     // NOTE: Whitespace is significant in Python
@@ -174,46 +185,42 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
 
             // Scan fields.
             // In pydantic, fields are denoted as `field_name: type`.
-            while i < lines.len() && lines[i].indent_count() == 1 {
-                // Consume decorators and methods.
-                if lines[i].is_decorator() {
-                    while !lines[i].is_method() {
+            while i < lines.len() && lines[i].indent_count() > 0 {
+                let line = lines[i];
+                if line.indent_count() > 1 {
+                    while lines[i].indent_count() > 1 && i < lines.len() {
                         i += 1;
-                        if i > lines.len() {
-                            return Err(ScanError(
-                                "Failed to scan decorator. corresponding method not found."
-                                    .to_string(),
-                            ));
-                        }
                     }
-                } else if lines[i].is_method() {
+                } else if line.is_class() && line.indent_count() == 0 {
+                    break;
+                } else if line.is_method() {
                     methods.push(scan_method(&lines, &mut i)?);
-                } else if lines[i].contains(":") && !lines[i].is_class() {
-                    let field_and_type: Vec<&str> =
-                        lines[i].split([':', '=']).map(|s| s.trim()).collect();
-                    fields.push((
-                        field_and_type[0].to_string(),
-                        Some(field_and_type[1].to_string()),
-                        None,
-                    ));
-                    i += 1;
-                } else if lines[i].contains("=") {
-                    let field_and_type: Vec<&str> = lines[i].split('=').map(|s| s.trim()).collect();
-                    fields.push((
-                        field_and_type[0].to_string(),
-                        None,
-                        Some(field_and_type[1].to_string()),
-                    ));
-                    i += 1;
-                } else if lines[i].is_docstring() {
+                } else if line.is_docstring() {
                     skip_multiline_docstring(&lines, &mut i);
-                } else if lines[i].is_placeholder() {
+                } else if line.is_placeholder() {
                     i += 1;
-                } else if lines[i].trim().chars().all(char::is_alphanumeric) {
-                    fields.push((lines[i].trim().to_string(), None, None));
+                } else if line.contains(":") && !line.is_class() {
+                    let field_and_type: Vec<&str> =
+                        line.split([':', '=']).map(|s| s.trim()).collect();
+                    fields.push((
+                        field_and_type[0].to_string(),
+                        Some(field_and_type[1].to_string()),
+                        None,
+                    ));
+                    i += 1;
+                } else if line.contains("=") {
+                    let field_and_type: Vec<&str> = line.split('=').map(|s| s.trim()).collect();
+                    fields.push((
+                        field_and_type[0].to_string(),
+                        None,
+                        Some(field_and_type[1].to_string()),
+                    ));
+                    i += 1;
+                } else if line.is_enum_variant() {
+                    fields.push((line.trim().to_string(), None, None));
                     i += 1;
                 } else {
-                    println!("Skipping unscannable line {}", lines[i]);
+                    println!("Skipping unscannable line {}", line);
                     i += 1;
                 }
             }
@@ -308,8 +315,8 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMethod, Scan
 
 fn skip_multiline_docstring(lines: &Vec<&str>, curr_pos: &mut usize) {
     *curr_pos += 1;
-    while !(lines[*curr_pos].contains(DocstringMarker::SINGLE)
-        || lines[*curr_pos].contains(DocstringMarker::DOUBLE))
+    while !(lines[*curr_pos].trim().ends_with(DocstringMarker::SINGLE)
+        || lines[*curr_pos].trim().ends_with(DocstringMarker::DOUBLE))
     {
         *curr_pos += 1;
     }
