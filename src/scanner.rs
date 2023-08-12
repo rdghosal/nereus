@@ -134,6 +134,8 @@ impl std::error::Error for ScanError {}
 pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
     let mut models = vec![];
     let mut i = 0;
+
+    // Split and filter out ignorable lines.
     let lines = source
         .split("\n")
         .filter(|s| {
@@ -148,10 +150,15 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
     // NOTE: Whitespace is significant in Python
     while i < lines.len() {
         let line = lines[i];
+
+        // Module-level docstrings.
         if line.is_docstring() {
             skip_multiline_docstring(&lines, &mut i);
+        // Ignore all module-level statements and expressions that aren't
+        // class definitions.
         } else if !(line.is_class() && line.indent_count() == 0) {
             i += 1;
+        // Ignore all other lines.
         } else {
             let mut class_name = line.split(' ').nth(1).unwrap();
             let mut fields: Vec<(String, Option<String>, Option<String>)> = vec![];
@@ -183,11 +190,12 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
 
             i += 1;
 
-            // Scan fields.
-            // In pydantic, fields are denoted as `field_name: type`.
+            // Scan class namespace.
             while i < lines.len() && lines[i].indent_count() > 0 {
                 let line = lines[i];
                 if line.indent_count() > 1 {
+                    // Ignore statements and expressions scoped to, e.g.,
+                    // methods.
                     while lines[i].indent_count() > 1 && i < lines.len() {
                         i += 1;
                     }
@@ -199,6 +207,7 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
                     skip_multiline_docstring(&lines, &mut i);
                 } else if line.is_placeholder() {
                     i += 1;
+                // TODO: handle field access
                 } else if line.contains(":") && !line.is_class() {
                     let field_and_type: Vec<&str> =
                         line.split([':', '=']).map(|s| s.trim()).collect();
