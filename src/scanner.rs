@@ -196,7 +196,7 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
                 if line.indent_count() > 1 {
                     // Ignore statements and expressions scoped to, e.g.,
                     // methods.
-                    while lines[i].indent_count() > 1 && i < lines.len() {
+                    while i < lines.len() && lines[i].indent_count() > 1 {
                         i += 1;
                     }
                 } else if line.is_class() && line.indent_count() == 0 {
