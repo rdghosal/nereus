@@ -246,6 +246,69 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
     Ok(models)
 }
 
+enum Signature {
+    Method,
+    Class,
+}
+
+fn scan_signature(type_: Signature) {}
+
+fn scan_bounded(
+    left: char,
+    lines: Vec<&str>,
+    curr_pos: &mut usize,
+    inclusive: bool,
+) -> Result<String, ScanError> {
+    let right = match left {
+        '(' => ')',
+        '{' => '}',
+        '[' => ']',
+        _ => panic!("Received unhandled boundary token {}", left),
+    };
+    let start = lines[*curr_pos].find(left);
+    if start.is_none() {
+        return Err(ScanError(format!(
+            "Left boundary token '{}' not found in line '{}'",
+            left, lines[*curr_pos]
+        )));
+    }
+
+    let mut inside = vec![&lines[*curr_pos][(start.unwrap() + 1)..]];
+    loop {
+        if *curr_pos == lines.len() {
+            return Err(ScanError(
+                "Failed to scan bounded lexeme. Right boundary (closing) token '{}' not found."
+                    .to_string(),
+            ));
+        }
+
+        let line = lines[*curr_pos];
+        if let Some(end) = line.find(right) {
+            inside.push(&line[..end]);
+            break;
+        } else {
+            inside.push(line);
+        }
+        *curr_pos += 1;
+    }
+    let mut joined = inside
+        .iter()
+        .map(|line| {
+            let mut line_ = line.trim().to_string();
+            if line_.ends_with(',') {
+                line_.push_str(" ");
+            }
+            line_
+        })
+        .collect::<Vec<String>>()
+        .join("");
+
+    if inclusive {
+        joined = format!("{}{}{}", right, joined, left);
+    }
+    Ok(joined)
+}
+
 fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMethod, ScanError> {
     // Remove consts::INDENT and trailing spaces.
     let method_signature = lines[*curr_pos].trim();
