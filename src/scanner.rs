@@ -344,6 +344,7 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMethod, Scan
 
     let param_str = scan_bounded('(', lines, curr_pos, false);
     for param_and_type in param_str?.split(',').map(|p| p.trim()) {
+        // FIXME: need to parse type and default separately and sequentially.
         let mut m = param_and_type
             .split([':', '='])
             .map(|pt| pt.trim().to_string());
