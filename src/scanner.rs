@@ -23,6 +23,7 @@ trait PyLine {
     fn indent_count(&self) -> usize;
     fn starts_with_token(&self, token: &str) -> bool;
     fn is_enum_variant(&self) -> bool;
+    fn get_declr_name(&self) -> Result<&str, ScanError>;
 }
 
 impl PyLine for &str {
@@ -79,7 +80,31 @@ impl PyLine for &str {
     fn indent_count(&self) -> usize {
         self.split(consts::INDENT).filter(|s| s.is_empty()).count()
     }
+
+    fn get_declr_name(&self) -> Result<&str, ScanError> {
+        let term = '(';
+        if !self.is_method() || !self.is_class() || !self.contains(term) {
+            return Err(ScanError(format!(
+                "Attempted to parse invalid declaration {}",
+                &self
+            )));
+        }
+
+        let end = self.find(term).unwrap();
+        if let Some(name) = self.split(' ').nth(1) {
+            return Ok(&name[..end]);
+        } else {
+            return Err(ScanError(format!(
+                "Failed to parse declaration '{}'. Invalid format.",
+                &self
+            )));
+        }
+    }
 }
+
+type PyType = String;
+type PyValue = String;
+type ClassName = String;
 
 struct DocstringMarker;
 impl DocstringMarker {
@@ -93,6 +118,13 @@ impl Placeholder {
     const ELLIPSIS: &str = "...";
 }
 
+#[derive(Debug, Clone)]
+struct PyParam {
+    name: String,
+    type_: Option<PyType>,
+    default: Option<PyValue>,
+}
+
 #[derive(Default, Debug, Clone)]
 pub enum PyMethodAccess {
     #[default]
@@ -103,8 +135,8 @@ pub enum PyMethodAccess {
 #[derive(Clone, Debug)]
 pub struct PyMethod {
     pub name: String,
-    pub args: Vec<(String, Option<String>)>,
-    pub returns: Option<String>,
+    pub params: Vec<PyParam>,
+    pub returns: Option<PyType>,
     pub access: PyMethodAccess,
 }
 
@@ -116,9 +148,9 @@ impl PyMethod {
 
 #[derive(Debug, Default, Clone)]
 pub struct PyClass {
-    pub class_name: String,
-    pub parents: Vec<String>,
-    pub fields: Vec<(String, Option<String>, Option<String>)>,
+    pub name: ClassName,
+    pub parents: Vec<ClassName>,
+    pub props: Vec<PyParam>,
     pub methods: Vec<PyMethod>,
 }
 
@@ -161,7 +193,7 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
         // Ignore all other lines.
         } else {
             let mut class_name = line.split(' ').nth(1).unwrap();
-            let mut fields: Vec<(String, Option<String>, Option<String>)> = vec![];
+            let mut props: Vec<PyParam> = vec![];
             let mut methods: Vec<PyMethod> = vec![];
 
             // Scan class names, including those of super classes.
@@ -211,7 +243,7 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
                 } else if line.contains(":") && !line.is_class() {
                     let field_and_type: Vec<&str> =
                         line.split([':', '=']).map(|s| s.trim()).collect();
-                    fields.push((
+                    props.push((
                         field_and_type[0].to_string(),
                         Some(field_and_type[1].to_string()),
                         None,
@@ -219,14 +251,14 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
                     i += 1;
                 } else if line.contains("=") {
                     let field_and_type: Vec<&str> = line.split('=').map(|s| s.trim()).collect();
-                    fields.push((
+                    props.push((
                         field_and_type[0].to_string(),
                         None,
                         Some(field_and_type[1].to_string()),
                     ));
                     i += 1;
                 } else if line.is_enum_variant() {
-                    fields.push((line.trim().to_string(), None, None));
+                    props.push((line.trim().to_string(), None, None));
                     i += 1;
                 } else {
                     println!("Skipping unscannable line {}", line);
@@ -235,9 +267,9 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
             }
 
             models.push(PyClass {
-                class_name: class_name.to_string(),
+                name: class_name.to_string(),
                 parents,
-                fields,
+                props,
                 methods,
             })
         }
@@ -246,16 +278,9 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
     Ok(models)
 }
 
-enum Signature {
-    Method,
-    Class,
-}
-
-fn scan_signature(type_: Signature) {}
-
 fn scan_bounded(
     left: char,
-    lines: Vec<&str>,
+    lines: &Vec<&str>,
     curr_pos: &mut usize,
     inclusive: bool,
 ) -> Result<String, ScanError> {
@@ -310,74 +335,52 @@ fn scan_bounded(
 }
 
 fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMethod, ScanError> {
+    // TODO: remove below after testing.
     // Remove consts::INDENT and trailing spaces.
-    let method_signature = lines[*curr_pos].trim();
-    if !method_signature.contains('(') {
-        return Err(ScanError(format!(
-            "Failed to find opening parenthesis in method signature {}",
-            method_signature
-        )));
-    }
+    let signature = lines[*curr_pos];
+    let name = signature.get_declr_name();
+    let mut params: Vec<PyParam> = vec![];
+    let mut returns: Option<PyType> = Option::None;
 
-    let method_name = method_signature.split('(').collect::<Vec<&str>>()[0];
-    let method_name = method_name.replace("def ", "");
-
-    let mut args: Vec<(String, Option<String>)> = vec![];
-    let mut found_closing_parens = false;
-    let mut returns: Option<String> = Option::None;
-
-    while !found_closing_parens {
-        let mut line = lines[*curr_pos].trim();
-        if let Option::Some(pos) = line.find('(') {
-            line = &line[pos + 1..];
-        }
-
-        // Parse return.
-        found_closing_parens = line.contains(')');
-        if found_closing_parens {
-            let arg_and_return = line.split(')').map(|s| s.trim()).collect::<Vec<&str>>();
-            line = arg_and_return[0];
-            let returns_ = arg_and_return[1]
-                .replace(":", "")
-                .replace("->", "")
-                .trim()
-                .to_string();
-            if !returns_.is_empty() {
-                returns = Option::Some(returns_);
-            }
-        }
-
-        // Parse arguments.
-        let args_ = line.split(',').map(|a| a.trim());
-        for a in args_ {
-            if a == "\\" || a == "*" || a == "" {
-                continue;
-            }
-            let field_and_type: Vec<&str> = a.split(':').collect();
-            let arg = (
-                field_and_type[0].to_string(),
-                if field_and_type.len() == 1 {
-                    None
-                } else {
-                    Some(field_and_type[1].trim().to_string())
-                },
-            );
-            args.push(arg);
-        }
-        *curr_pos += 1;
-
-        if *curr_pos == lines.len() && !found_closing_parens {
-            return Err(ScanError(format!(
-                "Failed to find closing parenthesis to parameters defined for method {}",
-                method_name
-            )));
+    let param_str = scan_bounded('(', lines, curr_pos, false);
+    for param_and_type in param_str?.split(',').map(|p| p.trim()) {
+        let mut m = param_and_type
+            .split([':', '='])
+            .map(|pt| pt.trim().to_string());
+        if let Some(name) = m.nth(0) {
+            params.push(PyParam {
+                name,
+                type_: m.nth(1),
+                default: m.nth(2),
+            });
+        } else {
+            return Err(ScanError(
+                "Failed to parse method parameters. Method name not found.".to_string(),
+            ));
         }
     }
+
+    let line = lines[*curr_pos];
+    if let Some(start) = line.find(')') {
+        // Closing parenthesis and terminating token (colon, :) are always
+        // found on the same line.
+        // Likewise for return annotations.
+        let r = line.replace(":", "").replace("->", "").trim().to_string();
+        if !r.is_empty() {
+            returns = Option::Some(r);
+        }
+    } else {
+        panic!(
+            "Reached invalid line {} after parameter parse. Expected closing parenthesis ')'",
+            line
+        )
+    }
+
     Ok(PyMethod {
-        name: method_name.clone(),
-        args,
+        name: name?.to_string(),
+        params,
         returns,
-        access: if method_name.starts_with('_') {
+        access: if name?.starts_with('_') {
             PyMethodAccess::Private
         } else {
             PyMethodAccess::Public
