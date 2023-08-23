@@ -1,5 +1,5 @@
 use crate::consts;
-use std::{collections::HashSet, iter::Map, slice::Iter, vec::IntoIter};
+use std::collections::HashSet;
 
 trait UniqueVec {
     fn remove_dups(&mut self);
@@ -138,8 +138,7 @@ fn split_string(string: String, token: char) -> Vec<String> {
 fn scan_pystr(line: &str) -> String {
     let mut pystr = String::new();
     let mut delims: Vec<char> = vec![];
-    let line_len = line.len();
-    for (i, ch) in line.chars().enumerate() {
+    for ch in line.chars() {
         pystr.push(ch);
         if ch == '\'' || ch == '"' {
             // If last quote matches current, we've closed that substr.
