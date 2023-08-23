@@ -1,5 +1,5 @@
 use crate::consts;
-use std::collections::HashSet;
+use std::{collections::HashSet, iter::Map, slice::Iter, vec::IntoIter};
 
 trait UniqueVec {
     fn remove_dups(&mut self);
@@ -7,7 +7,7 @@ trait UniqueVec {
 impl UniqueVec for Vec<PyClass> {
     fn remove_dups(&mut self) {
         let mut found = HashSet::new();
-        self.retain(|cls| found.insert(cls.class_name.clone()));
+        self.retain(|cls| found.insert(cls.name.clone()));
     }
 }
 
@@ -23,7 +23,7 @@ trait PyLine {
     fn indent_count(&self) -> usize;
     fn starts_with_token(&self, token: &str) -> bool;
     fn is_enum_variant(&self) -> bool;
-    fn get_declr_name(&self) -> Result<&str, ScanError>;
+    fn get_declr_name(&self) -> Result<String, ScanError>;
 }
 
 impl PyLine for &str {
@@ -81,25 +81,82 @@ impl PyLine for &str {
         self.split(consts::INDENT).filter(|s| s.is_empty()).count()
     }
 
-    fn get_declr_name(&self) -> Result<&str, ScanError> {
+    fn get_declr_name(&self) -> Result<String, ScanError> {
         let term = '(';
-        if !self.is_method() || !self.is_class() || !self.contains(term) {
+        if !(self.is_method() || self.is_class()) || !self.contains(term) {
             return Err(ScanError(format!(
                 "Attempted to parse invalid declaration {}",
                 &self
             )));
         }
 
-        let end = self.find(term).unwrap();
-        if let Some(name) = self.split(' ').nth(1) {
-            return Ok(&name[..end]);
+        let trimmed = self.replace(consts::INDENT, "");
+        if let Some(name) = trimmed.split(' ').nth(1) {
+            let end = name.find(term).unwrap();
+            return Ok(name[..end].to_string());
         } else {
             return Err(ScanError(format!(
                 "Failed to parse declaration '{}'. Invalid format.",
-                &self
+                &trimmed
             )));
         }
     }
+}
+
+fn split_string(string: String, token: char) -> Vec<String> {
+    let mut tokens: Vec<String> = vec![];
+    let mut current = String::new();
+    let mut iter = string.chars();
+    let mut pos: usize = 0;
+    loop {
+        match iter.next() {
+            Some(ch) => {
+                if ch == token {
+                    tokens.push(current.clone());
+                    current.clear();
+                } else if ch == '"' || ch == '\'' {
+                    let pystr = scan_pystr(&string[pos..]);
+                    for c in pystr.chars() {
+                        current.push(c);
+                        let _ = iter.next();
+                    }
+                } else {
+                    current.push(ch);
+                }
+            }
+            None => break,
+        }
+        pos += 1;
+    }
+    tokens.push(current.clone());
+    tokens
+        .iter()
+        .map(|t| t.trim().to_string())
+        .collect::<Vec<String>>()
+}
+
+fn scan_pystr(line: &str) -> String {
+    let mut pystr = String::new();
+    let mut delims: Vec<char> = vec![];
+    let line_len = line.len();
+    for (i, ch) in line.chars().enumerate() {
+        pystr.push(ch);
+        if ch == '\'' || ch == '"' {
+            // If last quote matches current, we've closed that substr.
+            if let Some(d) = delims.last() {
+                if ch == *d {
+                    delims.pop();
+                }
+                if delims.is_empty() {
+                    break;
+                }
+            // If not, we're scanning a new substr.
+            } else {
+                delims.push(ch);
+            }
+        }
+    }
+    pystr
 }
 
 type PyType = String;
@@ -119,10 +176,10 @@ impl Placeholder {
 }
 
 #[derive(Debug, Clone)]
-struct PyParam {
-    name: String,
-    type_: Option<PyType>,
-    default: Option<PyValue>,
+pub struct PyParam {
+    pub name: String,
+    pub type_: Option<PyType>,
+    pub default: Option<PyValue>,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -243,22 +300,26 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
                 } else if line.contains(":") && !line.is_class() {
                     let field_and_type: Vec<&str> =
                         line.split([':', '=']).map(|s| s.trim()).collect();
-                    props.push((
-                        field_and_type[0].to_string(),
-                        Some(field_and_type[1].to_string()),
-                        None,
-                    ));
+                    props.push(PyParam {
+                        name: field_and_type[0].to_string(),
+                        type_: Some(field_and_type[1].to_string()),
+                        default: None,
+                    });
                     i += 1;
                 } else if line.contains("=") {
                     let field_and_type: Vec<&str> = line.split('=').map(|s| s.trim()).collect();
-                    props.push((
-                        field_and_type[0].to_string(),
-                        None,
-                        Some(field_and_type[1].to_string()),
-                    ));
+                    props.push(PyParam {
+                        name: field_and_type[0].to_string(),
+                        type_: None,
+                        default: Some(field_and_type[1].to_string()),
+                    });
                     i += 1;
                 } else if line.is_enum_variant() {
-                    props.push((line.trim().to_string(), None, None));
+                    props.push(PyParam {
+                        name: line.trim().to_string(),
+                        type_: None,
+                        default: None,
+                    });
                     i += 1;
                 } else {
                     println!("Skipping unscannable line {}", line);
@@ -290,32 +351,39 @@ fn scan_bounded(
         '[' => ']',
         _ => panic!("Received unhandled boundary token {}", left),
     };
-    let start = lines[*curr_pos].find(left);
-    if start.is_none() {
+    let l_pos = lines[*curr_pos].find(left);
+    if l_pos.is_none() {
         return Err(ScanError(format!(
             "Left boundary token '{}' not found in line '{}'",
             left, lines[*curr_pos]
         )));
     }
 
-    let mut inside = vec![&lines[*curr_pos][(start.unwrap() + 1)..]];
+    let start = *curr_pos;
+    let mut inside: Vec<&str> = vec![];
     loop {
+        let line = if *curr_pos == start {
+            &lines[*curr_pos][l_pos.unwrap() + 1..]
+        } else {
+            lines[*curr_pos]
+        };
+
+        if let Some(r_pos) = line.find(right) {
+            inside.push(&line[..r_pos]);
+            break;
+        } else {
+            inside.push(line);
+        }
+
+        *curr_pos += 1;
         if *curr_pos == lines.len() {
             return Err(ScanError(
                 "Failed to scan bounded lexeme. Right boundary (closing) token '{}' not found."
                     .to_string(),
             ));
         }
-
-        let line = lines[*curr_pos];
-        if let Some(end) = line.find(right) {
-            inside.push(&line[..end]);
-            break;
-        } else {
-            inside.push(line);
-        }
-        *curr_pos += 1;
     }
+
     let mut joined = inside
         .iter()
         .map(|line| {
@@ -338,35 +406,38 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMethod, Scan
     // TODO: remove below after testing.
     // Remove consts::INDENT and trailing spaces.
     let signature = lines[*curr_pos];
-    let name = signature.get_declr_name();
+    let name = signature.get_declr_name()?;
     let mut params: Vec<PyParam> = vec![];
     let mut returns: Option<PyType> = Option::None;
 
-    let param_str = scan_bounded('(', lines, curr_pos, false);
-    for param_and_type in param_str?.split(',').map(|p| p.trim()) {
-        // FIXME: need to parse type and default separately and sequentially.
-        let mut m = param_and_type
-            .split([':', '='])
-            .map(|pt| pt.trim().to_string());
-        if let Some(name) = m.nth(0) {
-            params.push(PyParam {
-                name,
-                type_: m.nth(1),
-                default: m.nth(2),
-            });
-        } else {
-            return Err(ScanError(
-                "Failed to parse method parameters. Method name not found.".to_string(),
-            ));
-        }
+    let param_str = scan_bounded('(', lines, curr_pos, false)?;
+    for param in split_string(param_str, ',') {
+        let mut param_and_default = split_string(param, '=').into_iter();
+        let name_and_type = param_and_default.next();
+        let default = param_and_default.next();
+
+        let mut s = split_string(name_and_type.unwrap(), ':').into_iter();
+        let param_name = s.next();
+        let type_ = s.next();
+
+        params.push(PyParam {
+            name: param_name.unwrap(),
+            type_,
+            default,
+        });
     }
 
+    // Closing parenthesis and terminating token (colon, :) are always
+    // found on the same line.
+    // Likewise for return annotations.
     let line = lines[*curr_pos];
-    if let Some(start) = line.find(')') {
-        // Closing parenthesis and terminating token (colon, :) are always
-        // found on the same line.
-        // Likewise for return annotations.
-        let r = line.replace(":", "").replace("->", "").trim().to_string();
+    if let Some(p) = line.find(')') {
+        let r = line[p + 1..]
+            .replace(")", "")
+            .replace("->", "")
+            .replace(":", "")
+            .trim()
+            .to_string();
         if !r.is_empty() {
             returns = Option::Some(r);
         }
@@ -377,11 +448,13 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMethod, Scan
         )
     }
 
+    *curr_pos += 1;
+
     Ok(PyMethod {
-        name: name?.to_string(),
+        name: name.to_string(),
         params,
         returns,
-        access: if name?.starts_with('_') {
+        access: if name.starts_with('_') {
             PyMethodAccess::Private
         } else {
             PyMethodAccess::Public
@@ -419,12 +492,13 @@ mod test {
         let lines = vec![
             "    def my_method(",
             "        self,",
-            "        value: typing.Any",
+            "        value: typing.Any = 'my, default'",
             "    ) -> list[str | tuple[str, str]]:",
             "        return ['hello world!']",
         ];
         let mut pos = 0;
-        let _ = scan_method(&lines, &mut pos);
+        let m = scan_method(&lines, &mut pos);
+        dbg!(m.unwrap());
         assert_eq!(pos, 4);
     }
 
@@ -438,5 +512,12 @@ mod test {
         let mut pos = 0;
         let _ = scan_method(&lines, &mut pos);
         assert_eq!(pos, 2);
+    }
+
+    #[test]
+    fn test_declaration_name() {
+        let signature = "    def my_method(self,";
+        let declaration = signature.get_declr_name().unwrap();
+        assert_eq!(declaration, "my_method");
     }
 }

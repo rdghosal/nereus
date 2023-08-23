@@ -13,27 +13,27 @@ impl ClassDiagram {
             }
 
             // Define class as well as the fields and methods therein.
-            let class_name = format!("{}class {}{{", consts::INDENT, model.class_name);
+            let class_name = format!("{}class {}{{", consts::INDENT, model.name);
             lines.push(class_name);
-            for (name, type_, default) in model.fields.iter() {
-                let line = if type_.is_some() {
+            for prop in model.props.iter() {
+                let line = if prop.type_.is_some() {
                     format!(
                         "{}{}+{} {}",
                         consts::INDENT,
                         consts::INDENT,
-                        name,
-                        type_.clone().unwrap()
+                        prop.name,
+                        prop.type_.clone().unwrap()
                     )
-                } else if default.is_some() {
+                } else if prop.default.is_some() {
                     format!(
                         "{}{}+{} = {}",
                         consts::INDENT,
                         consts::INDENT,
-                        name,
-                        default.clone().unwrap()
+                        prop.name,
+                        prop.default.clone().unwrap()
                     )
                 } else {
-                    format!("{}{}+{}", consts::INDENT, consts::INDENT, name)
+                    format!("{}{}+{}", consts::INDENT, consts::INDENT, prop.name)
                 };
                 lines.push(line);
             }
@@ -56,12 +56,12 @@ impl ClassDiagram {
                     method.name,
                 );
                 let mut args: Vec<String> = vec![];
-                for (arg_name, type_) in method.args.clone() {
-                    let type_ = type_.unwrap_or_default();
+                for param in method.params.clone() {
+                    let type_ = param.type_.unwrap_or_default();
                     if type_.is_empty() {
-                        args.push(arg_name);
+                        args.push(param.name);
                     } else {
-                        args.push(format!("{} {}", type_, arg_name));
+                        args.push(format!("{} {}", type_, param.name));
                     }
                 }
                 if args.len() > 0 {
@@ -82,7 +82,7 @@ impl ClassDiagram {
                     consts::INDENT,
                     parent,
                     inherits,
-                    model.class_name
+                    model.name
                 ));
             }
         }
