@@ -338,67 +338,100 @@ pub fn lex(source: String) -> Result<Vec<PyClass>, ScanError> {
     Ok(models)
 }
 
-fn scan_bounded(
-    left: char,
+struct BoundToken {}
+impl BoundToken {
+    const PAREN_L: char = '(';
+    const PAREN_R: char = ')';
+    const BRACKET_L: char = '[';
+    const BRACKET_R: char = ']';
+    const BRACE_L: char = '{';
+    const BRACE_R: char = '}';
+    const L_TOKENS: [char; 3] = [
+        BoundToken::PAREN_L,
+        BoundToken::BRACKET_L,
+        BoundToken::BRACE_L,
+    ];
+
+    fn get_right(left: &char) -> char {
+        match *left {
+            BoundToken::PAREN_L => BoundToken::PAREN_R,
+            BoundToken::BRACKET_L => BoundToken::BRACKET_R,
+            BoundToken::BRACE_L => BoundToken::BRACE_R,
+            _ => panic!("Received unhandled boundary token {}", left),
+        }
+    }
+
+    fn find_left(line: &str) -> Option<(char, usize)> {
+        for token in BoundToken::L_TOKENS.iter() {
+            if let Some(pos) = line.find(*token) {
+                return Some((*token, pos));
+            }
+        }
+        return None;
+    }
+}
+
+// TODO: handle recursive cases.
+fn scan_enclosed(
     lines: &Vec<&str>,
-    curr_pos: &mut usize,
+    line_pos: &mut usize,
+    char_pos: Option<usize>,
     inclusive: bool,
 ) -> Result<String, ScanError> {
-    let right = match left {
-        '(' => ')',
-        '{' => '}',
-        '[' => ']',
-        _ => panic!("Received unhandled boundary token {}", left),
-    };
-    let l_pos = lines[*curr_pos].find(left);
-    if l_pos.is_none() {
-        return Err(ScanError(format!(
-            "Left boundary token '{}' not found in line '{}'",
-            left, lines[*curr_pos]
-        )));
-    }
+    let first = &lines[*line_pos][char_pos.unwrap_or_default()..];
 
-    let start = *curr_pos;
-    let mut inside: Vec<&str> = vec![];
-    loop {
-        let line = if *curr_pos == start {
-            &lines[*curr_pos][l_pos.unwrap() + 1..]
-        } else {
-            lines[*curr_pos]
-        };
+    if let Some((left, l_pos)) = BoundToken::find_left(first) {
+        let right = BoundToken::get_right(&left);
+        let start = *line_pos;
+        let mut inside: Vec<String> = vec![];
 
-        if let Some(r_pos) = line.find(right) {
-            inside.push(&line[..r_pos]);
-            break;
-        } else {
-            inside.push(line);
-        }
+        loop {
+            let line = if *line_pos == start {
+                &first[l_pos + 1..]
+            } else {
+                lines[*line_pos]
+            };
 
-        *curr_pos += 1;
-        if *curr_pos == lines.len() {
-            return Err(ScanError(
-                "Failed to scan bounded lexeme. Right boundary (closing) token '{}' not found."
-                    .to_string(),
-            ));
-        }
-    }
-
-    let mut joined = inside
-        .iter()
-        .map(|line| {
-            let mut line_ = line.trim().to_string();
-            if line_.ends_with(',') {
-                line_.push_str(" ");
+            if let Some((_, l_pos_)) = BoundToken::find_left(&line) {
+                inside.push(scan_enclosed(lines, line_pos, Some(l_pos_), inclusive)?);
+            } else if let Some(r_pos) = line.find(right) {
+                inside.push(line[..r_pos].to_string());
+                break;
+            } else {
+                inside.push(line.to_string());
             }
-            line_
-        })
-        .collect::<Vec<String>>()
-        .join("");
 
-    if inclusive {
-        joined = format!("{}{}{}", right, joined, left);
+            *line_pos += 1;
+            if *line_pos == lines.len() {
+                return Err(ScanError(
+                    "Failed to scan bounded lexeme. Right boundary (closing) token '{}' not found."
+                        .to_string(),
+                ));
+            }
+        }
+
+        let mut joined = inside
+            .iter()
+            .map(|line| {
+                let mut line_ = line.trim().to_string();
+                if line_.ends_with(',') {
+                    line_.push_str(" ");
+                }
+                line_
+            })
+            .collect::<Vec<String>>()
+            .join("");
+        if inclusive {
+            joined = format!("{}{}{}", left, joined.trim(), right);
+        }
+
+        return Ok(joined);
     }
-    Ok(joined)
+
+    return Err(ScanError(format!(
+        "Left enclosing token not found in line '{}'",
+        lines[*line_pos]
+    )));
 }
 
 fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMethod, ScanError> {
@@ -409,7 +442,7 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMethod, Scan
     let mut params: Vec<PyParam> = vec![];
     let mut returns: Option<PyType> = Option::None;
 
-    let param_str = scan_bounded('(', lines, curr_pos, false)?;
+    let param_str = scan_enclosed(lines, curr_pos, None, false)?;
     for param in split_string(param_str, ',') {
         let mut param_and_default = split_string(param, '=').into_iter();
         let name_and_type = param_and_default.next();
@@ -431,13 +464,18 @@ fn scan_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMethod, Scan
     // Likewise for return annotations.
     let line = lines[*curr_pos];
     if let Some(p) = line.find(')') {
-        let r = line[p + 1..]
+        let mut r = line[p + 1..]
             .replace(")", "")
             .replace("->", "")
             .replace(":", "")
             .trim()
             .to_string();
         if !r.is_empty() {
+            if let Some(t) = r.find('[') {
+                let t_concat = scan_enclosed(lines, curr_pos, None, true)?;
+                r = r[..t].to_string();
+                r.push_str(t_concat.as_str());
+            }
             returns = Option::Some(r);
         }
     } else {
@@ -497,7 +535,6 @@ mod test {
         ];
         let mut pos = 0;
         let m = scan_method(&lines, &mut pos);
-        dbg!(m.unwrap());
         assert_eq!(pos, 4);
     }
 
@@ -518,5 +555,49 @@ mod test {
         let signature = "    def my_method(self,";
         let declaration = signature.get_declr_name().unwrap();
         assert_eq!(declaration, "my_method");
+    }
+
+    #[test]
+    fn test_staggered_default_parse() {
+        let lines = vec![
+            "    (",
+            "        value1,",
+            "        value2,",
+            "        value3,",
+            "    )",
+        ];
+        let scanned = scan_enclosed(&lines, &mut 0, None, true);
+        assert_eq!(scanned.unwrap(), "(value1, value2, value3,)");
+    }
+
+    #[test]
+    fn test_type_parse() {
+        let lines = vec![
+            "    tuple[",
+            "        int,",
+            "        str,",
+            "        int",
+            "    ]",
+        ];
+        let scanned = scan_enclosed(&lines, &mut 0, None, true);
+        let res = format!("tuple{}", scanned.unwrap().as_str());
+        assert_eq!(res, "tuple[int, str, int]");
+    }
+
+    #[test]
+    fn test_listed_return_parse() {
+        let lines = vec![
+            "    def my_method(",
+            "        self,",
+            "        value: typing.Any = 'my, default'",
+            "    ) -> list[",
+            "            str | tuple[str, str]",
+            "        ]:",
+            "        return ['hello world!']",
+        ];
+        let mut pos = 0;
+        let m = scan_method(&lines, &mut pos).unwrap();
+        dbg!(&m);
+        assert_eq!(m.returns, Some("list[str | tuple[str, str]]".to_string()));
     }
 }
