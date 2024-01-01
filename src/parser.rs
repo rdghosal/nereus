@@ -195,7 +195,7 @@ fn parse_class_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMetho
         let name_and_type = split_string(&arg_and_default[0], ':');
         args.push(PyParam {
             name: name_and_type[0].to_owned(),
-            type_: Some(name_and_type.get(1).unwrap().to_string()),
+            dtype: Some(name_and_type.get(1).unwrap().to_string()),
             default: Some(arg_and_default.get(1).unwrap().to_string()),
         });
     }
@@ -255,27 +255,27 @@ fn parse_class_field(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyParam,
     match substrs.len() {
         3.. => Ok(PyParam {
             name: substrs[0].to_owned(),
-            type_: Some(substrs[1].to_owned()),
+            dtype: Some(substrs[1].to_owned()),
             default: Some(substrs[2].to_owned()),
         }),
         2 => {
             if line.contains('=') {
                 Ok(PyParam {
                     name: substrs[0].to_owned(),
-                    type_: None,
+                    dtype: None,
                     default: Some(substrs[1].to_owned()),
                 })
             } else {
                 Ok(PyParam {
                     name: substrs[0].to_owned(),
-                    type_: Some(substrs[1].to_owned()),
+                    dtype: Some(substrs[1].to_owned()),
                     default: None,
                 })
             }
         }
         1 => Ok(PyParam {
             name: substrs[0].to_owned(),
-            type_: None,
+            dtype: None,
             default: None,
         }),
         _ => Err(ParseError(format!("Failed to parse class field {}", line))),

@@ -8,7 +8,7 @@ type PyValue = String;
 #[derive(Debug, Clone)]
 pub struct PyParam {
     pub name: String,
-    pub type_: Option<PyType>,
+    pub dtype: Option<PyType>,
     pub default: Option<PyValue>,
 }
 
