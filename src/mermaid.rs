@@ -1,11 +1,11 @@
 use crate::{
     consts,
-    scanner::{PyClass, PyMethodAccess},
+    models::{PyClass, PyMethodAccess},
 };
 
 pub struct ClassDiagram;
 impl ClassDiagram {
-    pub fn make(models: Vec<PyClass>, lines: &mut Vec<String>) -> Result<(), &str> {
+    pub fn make<'a>(models: Vec<PyClass>, lines: &mut Vec<String>) -> Result<(), &'a str> {
         let inherits = " <|-- ";
         for model in models.iter() {
             if lines.is_empty() {
@@ -15,7 +15,7 @@ impl ClassDiagram {
             // Define class as well as the fields and methods therein.
             let class_name = format!("{}class {}{{", consts::INDENT, model.name);
             lines.push(class_name);
-            for prop in model.props.iter() {
+            for prop in model.fields.iter() {
                 let line = if prop.type_.is_some() {
                     format!(
                         "{}{}+{} {}",
@@ -56,10 +56,10 @@ impl ClassDiagram {
                     method.name,
                 );
                 let mut args: Vec<String> = vec![];
-                for param in method.params.clone() {
+                for param in method.args.clone() {
                     let type_ = param.type_.unwrap_or_default();
                     if type_.is_empty() {
-                        args.push(param.name);
+                        args.push(param.name.to_string());
                     } else {
                         args.push(format!("{} {}", type_, param.name));
                     }
