@@ -294,19 +294,21 @@ fn parse_bounded(
         '[' => ']',
         _ => panic!("Received unhandled boundary token {}", left),
     };
-    let l_pos = lines[*curr_pos].find(left);
-    if l_pos.is_none() {
-        return Err(ParseError(format!(
-            "Left boundary token '{}' not found in line '{}'",
-            left, lines[*curr_pos]
-        )));
-    }
+    let l_pos = match lines[*curr_pos].find(left) {
+        Some(v) => v,
+        None => {
+            return Err(ParseError(format!(
+                "Left boundary token '{}' not found in line '{}'",
+                left, lines[*curr_pos]
+            )));
+        }
+    };
 
     let start = *curr_pos;
     let mut inside = vec![];
     loop {
         let line = if *curr_pos == start {
-            &lines[*curr_pos][l_pos.unwrap() + 1..]
+            &lines[*curr_pos][l_pos + 1..]
         } else {
             lines[*curr_pos]
         };
@@ -342,7 +344,7 @@ fn parse_bounded(
     if inclusive {
         joined = format!("{}{}{}", right, joined, left);
     }
-    Ok(joined.to_owned())
+    Ok(joined)
 }
 
 fn split_string(line: &str, delim: char) -> Vec<String> {
