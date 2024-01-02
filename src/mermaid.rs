@@ -14,12 +14,12 @@ impl std::error::Error for MermaidError {}
 
 pub struct ClassDiagram;
 impl ClassDiagram {
-    pub fn make(models: Vec<PyClass>) -> Result<Vec<String>, MermaidError> {
+    pub fn make(models: Vec<PyClass>) -> Result<String, MermaidError> {
         let mut result = vec![];
         let inherits = " <|-- ";
         for model in models.iter() {
             // Define class as well as the fields and methods therein.
-            result.push("classDiagram".to_string());
+            result.push("classDiagram".to_owned());
 
             // Define class as well as the fields and methods therein.
             let class_name = format!("{}class {}{{", consts::INDENT, model.name);
@@ -36,7 +36,7 @@ impl ClassDiagram {
                 ));
             }
         }
-        Ok(result)
+        Ok(result.join("\r\n"))
     }
 
     fn make_class_methods(model: &PyClass) -> Vec<String> {
@@ -62,7 +62,7 @@ impl ClassDiagram {
                 if let Some(t) = &arg.dtype {
                     args.push(format!("{} {}", t, arg.name));
                 } else {
-                    args.push(arg.name.to_string());
+                    args.push(arg.name.to_owned());
                 }
             }
             if args.len() > 0 {

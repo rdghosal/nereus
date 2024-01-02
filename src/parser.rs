@@ -195,8 +195,8 @@ fn parse_class_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMetho
         let name_and_type = split_string(&arg_and_default[0], ':');
         args.push(PyParam {
             name: name_and_type[0].to_owned(),
-            dtype: Some(name_and_type.get(1).unwrap().to_string()),
-            default: Some(arg_and_default.get(1).unwrap().to_string()),
+            dtype: Some(name_and_type.get(1).unwrap().to_owned()),
+            default: Some(arg_and_default.get(1).unwrap().to_owned()),
         });
     }
 
@@ -322,7 +322,7 @@ fn parse_bounded(
         if *curr_pos == lines.len() {
             return Err(ParseError(
                 "Failed to scan bounded lexeme. Right boundary (closing) token '{}' not found."
-                    .to_string(),
+                    .to_owned(),
             ));
         }
     }
@@ -330,7 +330,7 @@ fn parse_bounded(
     let mut joined = inside
         .iter()
         .map(|line| {
-            let mut line_ = line.trim().to_string();
+            let mut line_ = line.trim().to_owned();
             if line_.ends_with(',') {
                 line_.push_str(" ");
             }
@@ -373,7 +373,7 @@ fn split_string(line: &str, delim: char) -> Vec<String> {
     result.push(buffer.clone());
     result
         .iter()
-        .map(|t| t.trim().to_string())
+        .map(|t| t.trim().to_owned())
         .collect::<Vec<String>>()
 }
 
