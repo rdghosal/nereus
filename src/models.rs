@@ -1,4 +1,4 @@
-use crate::consts;
+use crate::consts::*;
 use std::collections::HashSet;
 
 pub type PyClsName = String;
@@ -69,14 +69,12 @@ pub trait PyLine {
 impl PyLine for &str {
     fn is_docstring(&self) -> bool {
         let trimmed = self.trim();
-        trimmed.starts_with(consts::DocstringMarker::SINGLE)
-            || trimmed.starts_with(consts::DocstringMarker::DOUBLE)
+        trimmed.starts_with(DocstringMarker::SINGLE) || trimmed.starts_with(DocstringMarker::DOUBLE)
     }
 
     fn is_placeholder(&self) -> bool {
         let trimmed = self.trim();
-        trimmed.starts_with(consts::Placeholder::PASS)
-            || trimmed.starts_with(consts::Placeholder::ELLIPSIS)
+        trimmed.starts_with(Placeholder::PASS) || trimmed.starts_with(Placeholder::ELLIPSIS)
     }
 
     fn is_decorator(&self) -> bool {
@@ -109,11 +107,11 @@ impl PyLine for &str {
 
     fn is_full_docstring(&self) -> bool {
         let trimmed = self.trim();
-        (trimmed.starts_with(consts::DocstringMarker::SINGLE)
-            && trimmed.ends_with(consts::DocstringMarker::SINGLE)
+        (trimmed.starts_with(DocstringMarker::SINGLE)
+            && trimmed.ends_with(DocstringMarker::SINGLE)
             && trimmed.len() >= 6)
-            || (trimmed.starts_with(consts::DocstringMarker::DOUBLE)
-                && trimmed.ends_with(consts::DocstringMarker::DOUBLE)
+            || (trimmed.starts_with(DocstringMarker::DOUBLE)
+                && trimmed.ends_with(DocstringMarker::DOUBLE)
                 && trimmed.len() >= 6)
     }
 
@@ -126,6 +124,6 @@ impl PyLine for &str {
     }
 
     fn indent_count(&self) -> usize {
-        self.split(consts::INDENT).filter(|s| s.is_empty()).count()
+        self.split(INDENT).filter(|s| s.is_empty()).count()
     }
 }

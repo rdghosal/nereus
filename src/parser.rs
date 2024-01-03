@@ -169,8 +169,7 @@ fn parse_class_def(
                 Ok((cls_def[..end].split(' ').nth(1).unwrap().to_owned(), vec![]))
             } else {
                 Err(ParseError(format!(
-                    "Failed to identify class name terminator (:) in class {}",
-                    cls_def
+                    "Failed to parse class name. Terminal token ':' not found in class definition {cls_def:?}",
                 )))
             }
         }
@@ -215,10 +214,9 @@ fn parse_class_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMetho
             returns = Option::Some(r);
         }
     } else {
-        panic!(
-            "Reached invalid line {} after parameter parse. Expected closing parenthesis ')'",
-            line
-        )
+        return Err(ParseError(format!(
+            "Reached invalid line {line:?} after parameter parse. Expected closing parenthesis ')'",
+        )));
     }
 
     *curr_pos += 1;
@@ -236,8 +234,7 @@ fn get_method_name(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<String, Pa
     let line = lines[*curr_pos];
     if !line.is_method_def() || !line.contains(tok) {
         return Err(ParseError(format!(
-            "Attempted to parse invalid method definition {}",
-            &line
+            "Attempted to parse invalid method definition {line:?}",
         )));
     }
     let name = line.trim().split(' ').nth(1).unwrap();
@@ -278,7 +275,7 @@ fn parse_class_field(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyParam,
             dtype: None,
             default: None,
         }),
-        _ => Err(ParseError(format!("Failed to parse class field {}", line))),
+        _ => Err(ParseError(format!("Failed to parse class field {line:?}"))),
     }
 }
 
@@ -292,14 +289,18 @@ fn parse_bounded(
         '(' => ')',
         '{' => '}',
         '[' => ']',
-        _ => panic!("Received unhandled boundary token {}", left),
+        _ => {
+            return Err(ParseError(format!(
+                "Received unhandled boundary token {left:?}"
+            )));
+        }
     };
     let l_pos = match lines[*curr_pos].find(left) {
         Some(v) => v,
         None => {
             return Err(ParseError(format!(
-                "Left boundary token '{}' not found in line '{}'",
-                left, lines[*curr_pos]
+                "Left boundary token {left:?} not found in line {:?}",
+                lines[*curr_pos]
             )));
         }
     };
@@ -322,10 +323,9 @@ fn parse_bounded(
 
         *curr_pos += 1;
         if *curr_pos == lines.len() {
-            return Err(ParseError(
-                "Failed to scan bounded lexeme. Right boundary (closing) token '{}' not found."
-                    .to_owned(),
-            ));
+            return Err(ParseError(format!(
+                "Failed to parse bounded lexeme. Right boundary (closing) token {right:?} not found. Current line: {line:?}"
+            )));
         }
     }
 
@@ -342,7 +342,7 @@ fn parse_bounded(
         .join("");
 
     if inclusive {
-        joined = format!("{}{}{}", right, joined, left);
+        joined = format!("{right}{joined}{left}");
     }
     Ok(joined)
 }

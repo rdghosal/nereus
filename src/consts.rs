@@ -1,4 +1,4 @@
-pub const INDENT: &str = "    ";
+pub const INDENT: &'static str = "    ";
 
 pub struct DocstringMarker;
 impl DocstringMarker {
