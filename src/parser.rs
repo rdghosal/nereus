@@ -10,56 +10,6 @@ impl std::fmt::Display for ParseError {
 }
 impl std::error::Error for ParseError {}
 
-// #[cfg(test)]
-// mod test {
-//     use super::*;
-
-//     #[test]
-//     fn test_same_line_method_scan() {
-//         let lines = vec![
-//             "    def my_method(self, value: typing.Any):",
-//             "        print(value)",
-//         ];
-//         let mut pos = 0;
-//         let _ = scan_method(&lines, &mut pos);
-//         assert_eq!(pos, 1);
-//     }
-
-//     #[test]
-//     fn test_listed_arg_method_scan() {
-//         let lines = vec![
-//             "    def my_method(",
-//             "        self,",
-//             "        value: typing.Any = 'my, default'",
-//             "    ) -> list[str | tuple[str, str]]:",
-//             "        return ['hello world!']",
-//         ];
-//         let mut pos = 0;
-//         let m = scan_method(&lines, &mut pos);
-//         dbg!(m.unwrap());
-//         assert_eq!(pos, 4);
-//     }
-
-//     #[test]
-//     fn test_staggered_arg_method_scan() {
-//         let lines = vec![
-//             "    def my_method(self,",
-//             "        value: typing.Any) -> None:",
-//             "        print(value)",
-//         ];
-//         let mut pos = 0;
-//         let _ = scan_method(&lines, &mut pos);
-//         assert_eq!(pos, 2);
-//     }
-
-//     #[test]
-//     fn test_declaration_name() {
-//         let signature = "    def my_method(self,";
-//         let declaration = signature.get_declr_name().unwrap();
-//         assert_eq!(declaration, "my_method");
-//     }
-// }
-
 pub fn parse(source: String) -> Result<Vec<PyClass>, ParseError> {
     let mut models = vec![];
     let mut i = 0;
@@ -192,10 +142,18 @@ fn parse_class_method(lines: &Vec<&str>, curr_pos: &mut usize) -> Result<PyMetho
     for arg in split_string(&arg_str, ',') {
         let arg_and_default = split_string(&arg, '=');
         let name_and_type = split_string(&arg_and_default[0], ':');
+        let dtype = match name_and_type.get(1) {
+            Some(t) => Some(t.to_owned()),
+            None => None,
+        };
+        let default = match arg_and_default.get(1) {
+            Some(d) => Some(d.to_owned()),
+            None => None,
+        };
         args.push(PyParam {
             name: name_and_type[0].to_owned(),
-            dtype: Some(name_and_type.get(1).unwrap().to_owned()),
-            default: Some(arg_and_default.get(1).unwrap().to_owned()),
+            dtype,
+            default,
         });
     }
 
@@ -423,5 +381,56 @@ fn skip_multiline_docstring(lines: &Vec<&str>, curr_pos: &mut usize) {
 fn skip_placeholder(lines: &Vec<&str>, curr_pos: &mut usize) {
     if lines[*curr_pos].is_placeholder() {
         *curr_pos += 1;
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_same_line_method_scan() {
+        let lines = vec![
+            "    def my_method(self, value: typing.Any):",
+            "        print(value)",
+        ];
+        let mut pos = 0;
+        let _ = parse_class_method(&lines, &mut pos);
+        assert_eq!(pos, 1);
+    }
+
+    #[test]
+    fn test_listed_arg_method_scan() {
+        let lines = vec![
+            "    def my_method(",
+            "        self,",
+            "        value: typing.Any = 'my, default'",
+            "    ) -> list[str | tuple[str, str]]:",
+            "        return ['hello world!']",
+        ];
+        let mut pos = 0;
+        let m = parse_class_method(&lines, &mut pos);
+        dbg!(m.unwrap());
+        assert_eq!(pos, 4);
+    }
+
+    #[test]
+    fn test_staggered_arg_method_scan() {
+        let lines = vec![
+            "    def my_method(self,",
+            "        value: typing.Any) -> None:",
+            "        print(value)",
+        ];
+        let mut pos = 0;
+        let _ = parse_class_method(&lines, &mut pos);
+        assert_eq!(pos, 2);
+    }
+
+    #[test]
+    fn test_declaration_name() {
+        let lines = vec!["    def my_method(self,"];
+        let mut pos = 0;
+        let declaration = get_method_name(&lines, &mut pos).unwrap();
+        assert_eq!(declaration, "my_method");
     }
 }
